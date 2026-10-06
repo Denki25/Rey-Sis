@@ -7,6 +7,9 @@ import org.example.model.Student;
 import org.example.model.Task;
 
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public final class MockStudentRepository {
     private MockStudentRepository() {
@@ -30,8 +33,13 @@ public final class MockStudentRepository {
                 new Task("Update personal information", ""),
                 new Task("Apply for scholarship (optional)", "")
         );
-        return new Student("2025-0011", "Justine Rivera", "BS Information Technology", "3rd Year",
+        Student student = new Student("2025-0011", "Justine Rivera", "BS Information Technology", "3rd Year",
                 "justine.rivera@reyu.edu", "0917 123 4567", 5, 1.75, 15, 18,
                 "Eligible", schedule, announcements, tasks);
+        Path avatarPath = Paths.get(System.getProperty("user.home"), ".rey-sis", "profile-avatar.png");
+        if (Files.isRegularFile(avatarPath)) {
+            student.setAvatarPath(avatarPath.toString());
+        }
+        return student;
     }
 }

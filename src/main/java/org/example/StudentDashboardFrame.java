@@ -36,6 +36,7 @@ import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.awt.geom.Path2D;
 
 public class StudentDashboardFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -82,12 +83,28 @@ public class StudentDashboardFrame {
         sidebar.setPreferredSize(new Dimension(205, 0));
         sidebar.setBackground(DARK_GREEN);
 
-        JPanel top = new JPanel(new BorderLayout());
+        JPanel top = new JPanel();
         top.setOpaque(false);
-        top.setBorder(BorderFactory.createEmptyBorder(12, 18, 18, 18));
+        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+        top.setBorder(BorderFactory.createEmptyBorder(14, 20, 18, 20));
         LogoView logo = new LogoView();
-        logo.setPreferredSize(new Dimension(165, 125));
-        top.add(logo, BorderLayout.CENTER);
+        logo.setAlignmentX(0.5f);
+        logo.setPreferredSize(new Dimension(145, 105));
+        logo.setMaximumSize(new Dimension(145, 105));
+        top.add(logo);
+        top.add(Box.createVerticalStrut(4));
+        JPanel brand = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        brand.setOpaque(false);
+        brand.setAlignmentX(0.5f);
+        JLabel rey = new JLabel("REY");
+        rey.setFont(new Font("SansSerif", Font.BOLD, 21));
+        rey.setForeground(Color.WHITE);
+        JLabel sis = new JLabel(" SIS");
+        sis.setFont(new Font("SansSerif", Font.BOLD, 21));
+        sis.setForeground(GOLD);
+        brand.add(rey);
+        brand.add(sis);
+        top.add(brand);
         sidebar.add(top, BorderLayout.NORTH);
 
         JPanel navigation = new JPanel();
@@ -128,9 +145,18 @@ public class StudentDashboardFrame {
         button.setFocusPainted(false);
         button.setContentAreaFilled(true);
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        if (!active && !text.equals("Sign Out")) {
-            button.addActionListener(event -> showComingSoon(text));
+        if (text.equals("Sign Out")) {
+            return button;
         }
+        button.addActionListener(event -> {
+            if (text.equals("My Profile")) {
+                openProfile();
+            } else if (active) {
+                showDashboardMessage();
+            } else {
+                showComingSoon(text);
+            }
+        });
         if (text.equals("Notifications")) {
             button.add(new BadgeLabel("3"));
         }
@@ -184,19 +210,19 @@ public class StudentDashboardFrame {
         section.add(sectionTitle("Quick Stats", IconType.STATS, null), BorderLayout.NORTH);
         JPanel cards = new JPanel(new GridLayout(1, 4, 10, 0));
         cards.setOpaque(false);
-        cards.add(createStatCard("Enrolled Subjects", String.valueOf(student.getEnrolledSubjects()), "", IconType.ENROLLMENT, new Color(231, 241, 226)));
-        cards.add(createStatCard("Current GPA", String.format("%.2f", student.getCurrentGpa()), "", IconType.GPA, new Color(255, 242, 211)));
-        cards.add(createStatCard("Units Enrolled", student.getEnrolledUnits() + " / " + student.getMaximumUnits(), "", IconType.GRADES, new Color(231, 241, 226)));
-        cards.add(createStatCard("Dean's List Standing", student.getDeansListStanding(), "", IconType.STAR, new Color(255, 242, 211)));
+        cards.add(createStatCard("Enrolled Subjects", String.valueOf(student.getEnrolledSubjects()), "", IconType.ENROLLMENT, DEEP_GREEN));
+        cards.add(createStatCard("Current GPA", String.format("%.2f", student.getCurrentGpa()), "", IconType.GPA, GOLD));
+        cards.add(createStatCard("Units Enrolled", student.getEnrolledUnits() + " / " + student.getMaximumUnits(), "", IconType.GRADES, DEEP_GREEN));
+        cards.add(createStatCard("Dean's List Standing", student.getDeansListStanding(), "", IconType.STAR, GOLD));
         section.add(cards, BorderLayout.CENTER);
         return section;
     }
 
-    private JPanel createStatCard(String title, String value, String suffix, IconType iconType, Color background) {
-        CardPanel card = new CardPanel(background);
+    private JPanel createStatCard(String title, String value, String suffix, IconType iconType, Color iconColor) {
+        CardPanel card = new CardPanel(Color.WHITE);
         card.setLayout(new BorderLayout(4, 4));
         card.setBorder(BorderFactory.createEmptyBorder(12, 13, 10, 10));
-        card.add(new DashboardIconLabel(iconType, GOLD), BorderLayout.NORTH);
+        card.add(new DashboardIconLabel(iconType, iconColor), BorderLayout.NORTH);
         JLabel valueLabel = new JLabel(value + suffix);
         valueLabel.setFont(new Font("SansSerif", Font.BOLD, title.equals("Dean's List Standing") ? 19 : 25));
         valueLabel.setForeground(TEXT);
@@ -213,7 +239,7 @@ public class StudentDashboardFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
         header.add(sectionTitle("Today's Schedule", IconType.CALENDAR, null), BorderLayout.WEST);
-        header.add(linkLabel("View Full Schedule"), BorderLayout.EAST);
+        header.add(actionButton("View Full Schedule", () -> showComingSoon("Full Schedule")), BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
         JPanel rows = new JPanel(new GridLayout(student.getSchedule().size(), 1, 0, 7));
         rows.setOpaque(false);
@@ -271,7 +297,7 @@ public class StudentDashboardFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
         header.add(sectionTitle("My Information", IconType.PROFILE, null), BorderLayout.WEST);
-        header.add(linkLabel("Edit Profile"), BorderLayout.EAST);
+        header.add(actionButton("Edit Profile", () -> showComingSoon("Profile editing")), BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
         JPanel details = new JPanel(new GridLayout(6, 1));
         details.setOpaque(false);
@@ -306,8 +332,11 @@ public class StudentDashboardFrame {
         JPanel content = new JPanel(new GridLayout(1, 2, 12, 0));
         content.setOpaque(false);
         content.add(new DonutPanel(student.getEnrolledSubjects(), 6));
-        JPanel legend = new JPanel(new GridLayout(3, 1));
+        JPanel legend = new JPanel(new GridLayout(3, 1, 0, 3));
         legend.setOpaque(false);
+        legend.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 1, 0, 0, BORDER),
+                BorderFactory.createEmptyBorder(2, 14, 2, 0)));
         addLegendRow(legend, "Enrolled", String.valueOf(student.getEnrolledSubjects()), DEEP_GREEN);
         addLegendRow(legend, "Remaining", String.valueOf(6 - student.getEnrolledSubjects()), GOLD);
         addLegendRow(legend, "Total Units", String.valueOf(student.getMaximumUnits()), new Color(126, 128, 126));
@@ -344,7 +373,7 @@ public class StudentDashboardFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
         header.add(sectionTitle("Recent Announcements", IconType.ANNOUNCEMENT, null), BorderLayout.WEST);
-        header.add(linkLabel("View All"), BorderLayout.EAST);
+        header.add(actionButton("View All", () -> showComingSoon("All announcements")), BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
         JPanel rows = new JPanel(new GridLayout(student.getAnnouncements().size(), 1));
         rows.setOpaque(false);
@@ -371,7 +400,7 @@ public class StudentDashboardFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
         header.add(sectionTitle("My Tasks", IconType.TASK, null), BorderLayout.WEST);
-        header.add(linkLabel("View All"), BorderLayout.EAST);
+        header.add(actionButton("View All", () -> showComingSoon("All tasks")), BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
         JPanel rows = new JPanel(new GridLayout(student.getTasks().size(), 1));
         rows.setOpaque(false);
@@ -417,6 +446,19 @@ public class StudentDashboardFrame {
         return label;
     }
 
+    private JButton actionButton(String text, Runnable action) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("SansSerif", Font.PLAIN, 9));
+        button.setForeground(DEEP_GREEN);
+        button.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, DEEP_GREEN));
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setMargin(new Insets(1, 2, 1, 2));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.addActionListener(event -> action.run());
+        return button;
+    }
+
     private JLabel smallLabel(String text, int size, Color color) {
         JLabel label = new JLabel(text);
         label.setFont(new Font("SansSerif", Font.PLAIN, size));
@@ -436,8 +478,17 @@ public class StudentDashboardFrame {
         new LoginFrame().showWindow();
     }
 
+    private void openProfile() {
+        window.dispose();
+        new StudentProfileFrame(student).showWindow();
+    }
+
     private void showComingSoon(String module) {
         javax.swing.JOptionPane.showMessageDialog(window, module + " is coming next.", "REY SIS", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showDashboardMessage() {
+        javax.swing.JOptionPane.showMessageDialog(window, "Dashboard is already open.", "REY SIS", javax.swing.JOptionPane.INFORMATION_MESSAGE);
     }
 
     private static BufferedImage loadImage(String resourcePath) {
@@ -446,6 +497,16 @@ public class StudentDashboardFrame {
         } catch (Exception exception) {
             return null;
         }
+    }
+
+    private static BufferedImage loadFirstImage(String... resourcePaths) {
+        for (String resourcePath : resourcePaths) {
+            BufferedImage image = loadImage(resourcePath);
+            if (image != null) {
+                return image;
+            }
+        }
+        return null;
     }
 
     private static class HeroPanel extends JPanel {
@@ -496,12 +557,29 @@ public class StudentDashboardFrame {
             g.fillRect(0, 0, getWidth(), getHeight());
             g.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, 50), 0, getHeight(), new Color(255, 255, 255, 205)));
             g.fillRect(0, 0, getWidth(), getHeight());
+            Path2D wave = new Path2D.Double();
+            wave.moveTo(getWidth() - 30, 0);
+            wave.lineTo(getWidth(), 0);
+            wave.lineTo(getWidth(), getHeight());
+            wave.lineTo(getWidth() - 112, getHeight());
+            wave.curveTo(getWidth() - 112, getHeight() - 28, getWidth() - 103, getHeight() - 48, getWidth() - 84, getHeight() - 68);
+            wave.curveTo(getWidth() - 59, getHeight() - 94, getWidth() - 39, getHeight() - 120, getWidth() - 30, 0);
+            wave.closePath();
+            g.setColor(new Color(0, 59, 44, 245));
+            g.fill(wave);
+            g.setColor(GOLD);
+            g.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            Path2D accent = new Path2D.Double();
+            accent.moveTo(getWidth() - 2, 47);
+            accent.curveTo(getWidth() - 18, 85, getWidth() - 39, 96, getWidth() - 56, 119);
+            accent.curveTo(getWidth() - 73, 140, getWidth() - 82, 155, getWidth() - 84, getHeight());
+            g.draw(accent);
             g.dispose();
         }
     }
 
     private static class LogoView extends JPanel {
-        private final BufferedImage image = loadImage("/images/rey-sis-logo.png");
+        private final BufferedImage image = loadFirstImage("/images/images/Frame 6 (1).png", "/images/rey-sis-logo.png");
 
         LogoView() { setOpaque(false); }
 
@@ -571,7 +649,7 @@ public class StudentDashboardFrame {
             int size = Math.min(getWidth(), getHeight()) - 16;
             int x = (getWidth() - size) / 2;
             int y = (getHeight() - size) / 2;
-            g.setStroke(new BasicStroke(9, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.setStroke(new BasicStroke(8, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             g.setColor(new Color(231, 235, 229));
             g.drawOval(x, y, size, size);
             g.setColor(DEEP_GREEN);
@@ -590,12 +668,12 @@ public class StudentDashboardFrame {
         }
     }
 
-    private enum IconType {
+    enum IconType {
         DASHBOARD, PROFILE, ENROLLMENT, CALENDAR, GRADES, RECORDS, REQUESTS, BELL,
         SIGN_OUT, STATS, GPA, STAR, ANNOUNCEMENT, TASK
     }
 
-    private static class DashboardIcon implements javax.swing.Icon {
+    static class DashboardIcon implements javax.swing.Icon {
         private final IconType type;
         private final Color color;
 
