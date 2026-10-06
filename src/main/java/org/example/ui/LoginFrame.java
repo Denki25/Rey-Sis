@@ -1,7 +1,11 @@
-package org.example;
+package org.example.ui;
 
+import org.example.auth.LoginValidator;
 import org.example.data.MockStudentRepository;
-
+import org.example.ui.views.admin.AdminDashboardFrame;
+import org.example.ui.views.cashier.CashierDashboardFrame;
+import org.example.ui.views.student.StudentDashboardFrame;
+import org.example.model.Cashier;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -31,6 +35,7 @@ import java.awt.event.ActionEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.util.Arrays;
 
 import javax.imageio.ImageIO;
 
@@ -226,13 +231,34 @@ public class LoginFrame {
     }
 
     private void attemptLogin(ActionEvent event) {
-        String validationMessage = LoginValidator.validate(usernameField.getText(), passwordField.getPassword());
+        String username = usernameField.getText().trim();
+        char[] passwordChars = passwordField.getPassword();
+
+        // Validate empty fields
+        String validationMessage = LoginValidator.validate(username, passwordChars);
         if (validationMessage != null) {
             showMessage(validationMessage);
             return;
         }
-        window.dispose();
-        new StudentDashboardFrame(MockStudentRepository.getSampleStudent()).showWindow();
+
+        String password = new String(passwordChars);
+
+        // Role-Based Authentication Logic
+        if (username.equalsIgnoreCase("admin") && password.equals("admin123")) {
+            window.dispose();
+            new AdminDashboardFrame().showWindow();
+        } else if (username.equalsIgnoreCase("cashier") && password.equals("cashier123")) {
+            window.dispose(); // Closes the login window
+            Cashier loggedInCashier = new Cashier("Head Cashier", "CASH-001");
+            new CashierDashboardFrame(loggedInCashier).showWindow();
+        } else if (username.equalsIgnoreCase("student") && password.equals("student123")) {
+            window.dispose();
+            new StudentDashboardFrame(MockStudentRepository.getSampleStudent()).showWindow();
+        } else {
+            showMessage("Invalid username or password.");
+        }
+
+        Arrays.fill(passwordChars, '0');
     }
 
     private void showMessage(String message) {

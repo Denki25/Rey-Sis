@@ -1,4 +1,4 @@
-package org.example;
+package org.example.auth;
 
 public final class LoginValidator {
     private LoginValidator() {

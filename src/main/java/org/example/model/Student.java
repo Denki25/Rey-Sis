@@ -4,11 +4,11 @@ import java.util.List;
 
 public final class Student {
     private final String studentId;
-    private final String name;
+    private String name;
     private final String program;
     private final String yearLevel;
-    private final String email;
-    private final String contactNumber;
+    private String email;
+    private String contactNumber;
     private final int enrolledSubjects;
     private final double currentGpa;
     private final int enrolledUnits;
@@ -17,6 +17,14 @@ public final class Student {
     private final List<ScheduleItem> schedule;
     private final List<Announcement> announcements;
     private final List<Task> tasks;
+    private String dateOfBirth = "September 18, 2003";
+    private String address = "San Fernando, Pampanga";
+    private String location = "San Fernando, Pampanga";
+    private String section = "BSIT 3-A";
+    private String academicStatus = "Regular Student";
+    private String curriculumYear = "2023 Curriculum";
+    private String adviser = "Prof. Maria L. Santos";
+    private String avatarPath;
 
     public Student(String studentId, String name, String program, String yearLevel, String email,
                    String contactNumber, int enrolledSubjects, double currentGpa, int enrolledUnits,
@@ -52,4 +60,19 @@ public final class Student {
     public List<ScheduleItem> getSchedule() { return schedule; }
     public List<Announcement> getAnnouncements() { return announcements; }
     public List<Task> getTasks() { return tasks; }
+    public String getDateOfBirth() { return dateOfBirth; }
+    public String getAddress() { return address; }
+    public String getLocation() { return location; }
+    public String getSection() { return section; }
+    public String getAcademicStatus() { return academicStatus; }
+    public String getCurriculumYear() { return curriculumYear; }
+    public String getAdviser() { return adviser; }
+    public String getAvatarPath() { return avatarPath; }
+
+    public void setDateOfBirth(String dateOfBirth) { this.dateOfBirth = dateOfBirth; }
+    public void setName(String name) { this.name = name; }
+    public void setAddress(String address) { this.address = address; this.location = address; }
+    public void setContactNumber(String contactNumber) { this.contactNumber = contactNumber; }
+    public void setEmail(String email) { this.email = email; }
+    public void setAvatarPath(String avatarPath) { this.avatarPath = avatarPath; }
 }

@@ -1,5 +1,7 @@
 package org.example;
 
+import org.example.ui.LoginFrame;
+
 import javax.swing.SwingUtilities;
 
 public class Main {
