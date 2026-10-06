@@ -1,5 +1,7 @@
 package org.example;
 
+import org.example.data.MockStudentRepository;
+
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -229,7 +231,8 @@ public class LoginFrame {
             showMessage(validationMessage);
             return;
         }
-        showMessage("Prototype sign-in successful for " + usernameField.getText().trim() + ".\nAuthentication is not connected yet.");
+        window.dispose();
+        new StudentDashboardFrame(MockStudentRepository.getSampleStudent()).showWindow();
     }
 
     private void showMessage(String message) {
