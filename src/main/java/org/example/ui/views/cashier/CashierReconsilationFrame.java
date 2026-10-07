@@ -5,9 +5,17 @@ import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
 
 public class CashierReconsilationFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -20,6 +28,13 @@ public class CashierReconsilationFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Reconciliation");
     private final Cashier cashier;
+    private final List<Double> expectedValues = new ArrayList<>();
+    private final List<JTextField> actualFields = new ArrayList<>();
+    private final List<JLabel> statusLabels = new ArrayList<>();
+    private final List<JPanel> statusBoxes = new ArrayList<>();
+    private JLabel totalShiftValue;
+    private JButton submitSettlementButton;
+    private boolean settlementSubmitted;
 
     public CashierReconsilationFrame() {
         this(null);
@@ -206,7 +221,6 @@ public class CashierReconsilationFrame {
         userBadge.add(avatar);
         userBadge.add(userText);
 
-        header.add(rightControls, BorderLayout.EAST);
         rightControls.add(userBadge);
 
         return header;
@@ -244,6 +258,7 @@ public class CashierReconsilationFrame {
         gridWrapper.add(createReconCard("Cash Drawer", "SYSTEM EXPECTED", "P 54,000.00", "ACTUAL COUNT", "P 54,000.00", "Balanced: P 0.00", true));
         gridWrapper.add(createReconCard("Digital (GCash/Maya)", "SYSTEM EXPECTED", "P 73,650.00", "TERMINAL BATCH TOTAL", "P 73,650.00", "Balanced: P 0.00", true));
         gridWrapper.add(createReconCard("Bank / Card", "SYSTEM EXPECTED", "P 21,000.00", "POS TERMINAL TOTAL", "P 20,500.00", "Short: -P 500.00", false));
+        updateReconciliation();
 
         // Bottom Total Block
         JPanel bottomWrapper = new JPanel(new BorderLayout());
@@ -277,13 +292,14 @@ public class CashierReconsilationFrame {
         eVal.setFont(new Font("SansSerif", Font.BOLD, 18));
         eVal.setForeground(TEXT);
         eVal.setAlignmentX(Component.LEFT_ALIGNMENT);
+        expectedValues.add(parseAmount(expVal));
 
         JLabel aLabel = new JLabel(actLabel);
         aLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
         aLabel.setForeground(MUTED);
         aLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JTextField actField = new JTextField(actVal);
+        JTextField actField = createAmountField(parseAmount(actVal));
         actField.setFont(new Font("SansSerif", Font.PLAIN, 13));
         actField.setForeground(TEXT);
         actField.setBackground(PAGE);
@@ -293,19 +309,10 @@ public class CashierReconsilationFrame {
         ));
         actField.setAlignmentX(Component.LEFT_ALIGNMENT);
         actField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        actualFields.add(actField);
 
-        JPanel statusBox = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isBalanced ? new Color(230, 245, 233) : new Color(254, 240, 228));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        statusBox.setOpaque(false);
+        JPanel statusBox = new JPanel(new BorderLayout());
+        statusBox.setOpaque(true);
         statusBox.setLayout(new BorderLayout());
         statusBox.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
         statusBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
@@ -315,6 +322,13 @@ public class CashierReconsilationFrame {
         statusLbl.setFont(new Font("SansSerif", Font.BOLD, 12));
         statusLbl.setForeground(isBalanced ? new Color(34, 139, 34) : new Color(218, 100, 33));
         statusBox.add(statusLbl, BorderLayout.CENTER);
+        statusLabels.add(statusLbl);
+        statusBoxes.add(statusBox);
+        actField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent event) { updateReconciliation(); }
+            public void removeUpdate(DocumentEvent event) { updateReconciliation(); }
+            public void changedUpdate(DocumentEvent event) { updateReconciliation(); }
+        });
 
         card.add(titleLbl);
         card.add(Box.createVerticalStrut(24));
@@ -344,13 +358,13 @@ public class CashierReconsilationFrame {
         tLbl.setFont(new Font("SansSerif", Font.BOLD, 12));
         tLbl.setForeground(TEXT);
 
-        JLabel tVal = new JLabel("P 148,650.00");
-        tVal.setFont(new Font("SansSerif", Font.BOLD, 24));
-        tVal.setForeground(TEXT);
+        totalShiftValue = new JLabel(formatAmount(calculateTotalCollection()));
+        totalShiftValue.setFont(new Font("SansSerif", Font.BOLD, 24));
+        totalShiftValue.setForeground(TEXT);
 
         leftPanel.add(tLbl);
         leftPanel.add(Box.createVerticalStrut(6));
-        leftPanel.add(tVal);
+        leftPanel.add(totalShiftValue);
 
         JButton submitBtn = new JButton("Submit Settlement");
         submitBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
@@ -359,7 +373,8 @@ public class CashierReconsilationFrame {
         submitBtn.setFocusPainted(false);
         submitBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         submitBtn.setBorder(BorderFactory.createEmptyBorder(12, 28, 12, 28));
-        submitBtn.addActionListener(e -> JOptionPane.showMessageDialog(window, "Settlement Submitted Successfully.", "REY SIS", JOptionPane.INFORMATION_MESSAGE));
+        submitSettlementButton = submitBtn;
+        submitBtn.addActionListener(e -> submitSettlement());
 
         JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 8));
         rightPanel.setOpaque(false);
@@ -369,6 +384,138 @@ public class CashierReconsilationFrame {
         card.add(rightPanel, BorderLayout.EAST);
 
         return card;
+    }
+
+    private void updateReconciliation() {
+        double total = calculateTotalCollection();
+        for (int index = 0; index < actualFields.size(); index++) {
+            double variance = parseAmount(actualFields.get(index).getText()) - expectedValues.get(index);
+            JLabel label = statusLabels.get(index);
+            JPanel box = statusBoxes.get(index);
+            if (Math.abs(variance) < 0.005) {
+                label.setText("Balanced: " + formatAmount(0));
+                label.setForeground(new Color(34, 139, 34));
+                box.setBackground(new Color(230, 245, 233));
+            } else if (variance < 0) {
+                label.setText("Short: -" + formatAmount(Math.abs(variance)));
+                label.setForeground(new Color(190, 65, 65));
+                box.setBackground(new Color(254, 232, 228));
+            } else {
+                label.setText("Over: +" + formatAmount(variance));
+                label.setForeground(new Color(218, 100, 33));
+                box.setBackground(new Color(254, 240, 228));
+            }
+        }
+        if (totalShiftValue != null) totalShiftValue.setText(formatAmount(total));
+        if (window.getContentPane() != null) {
+            window.getContentPane().revalidate();
+            window.getContentPane().repaint();
+        }
+    }
+
+    private double calculateTotalCollection() {
+        double total = 0;
+        for (JTextField field : actualFields) total += parseAmount(field.getText());
+        return total;
+    }
+
+    private double calculateTotalVariance() {
+        double variance = 0;
+        for (int index = 0; index < actualFields.size(); index++) {
+            variance += parseAmount(actualFields.get(index).getText()) - expectedValues.get(index);
+        }
+        return variance;
+    }
+
+    private void submitSettlement() {
+        if (settlementSubmitted) return;
+        double variance = calculateTotalVariance();
+        if (Math.abs(variance) > 0.005) {
+            JPanel form = new JPanel(new GridLayout(0, 1, 0, 8));
+            form.add(new JLabel("A discrepancy of " + formatSignedAmount(variance) + " was detected."));
+            form.add(new JLabel("Reason / Remarks (required):"));
+            JTextField remarks = new JTextField();
+            JCheckBox supervisor = new JCheckBox("Supervisor confirmation received");
+            form.add(remarks);
+            form.add(supervisor);
+            int choice = JOptionPane.showConfirmDialog(window, form, "Confirm Discrepancy", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (choice != JOptionPane.OK_OPTION || remarks.getText().trim().isEmpty() || !supervisor.isSelected()) {
+                JOptionPane.showMessageDialog(window, "A reason and supervisor confirmation are required.", "Settlement Required", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+        }
+        settlementSubmitted = true;
+        for (JTextField field : actualFields) field.setEditable(false);
+        if (submitSettlementButton != null) submitSettlementButton.setEnabled(false);
+        showSettlementSummary(variance);
+    }
+
+    private void showSettlementSummary(double variance) {
+        JTextArea summary = new JTextArea("REY SIS UNIVERSITY\nEND-OF-SHIFT SUMMARY REPORT\n\n"
+                + "Cashier: " + (cashier != null ? cashier.getName() : "Maria Santos") + "\n"
+                + "Counter: 03\n"
+                + "Total Shift Collection: " + formatAmount(calculateTotalCollection()) + "\n"
+                + "Variance: " + formatSignedAmount(variance) + "\n\n"
+                + "Settlement submitted successfully.");
+        summary.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        summary.setEditable(false);
+        JButton print = new JButton("Print Summary");
+        print.addActionListener(event -> {
+            try {
+                summary.print();
+            } catch (Exception exception) {
+                JOptionPane.showMessageDialog(window, "Unable to print summary: " + exception.getMessage(), "Print Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        JPanel panel = new JPanel(new BorderLayout(0, 10));
+        panel.add(new JScrollPane(summary), BorderLayout.CENTER);
+        panel.add(print, BorderLayout.SOUTH);
+        JOptionPane.showMessageDialog(window, panel, "Settlement Submitted", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private double parseAmount(String value) {
+        String numeric = value.replaceAll("[^0-9.,-]", "").replace(",", "");
+        return numeric.isEmpty() || numeric.equals("-") ? 0 : Double.parseDouble(numeric);
+    }
+
+    private String formatAmount(double value) {
+        return String.format(Locale.US, "₱ %,.2f", value);
+    }
+
+    private String formatSignedAmount(double value) {
+        return value >= 0 ? "+" + formatAmount(value) : "-" + formatAmount(Math.abs(value));
+    }
+
+    private JTextField createAmountField(double amount) {
+        JTextField field = new JTextField(String.format(Locale.US, "%.2f", amount));
+        field.setDocument(new javax.swing.text.PlainDocument());
+        ((javax.swing.text.AbstractDocument) field.getDocument()).setDocumentFilter(new DocumentFilter() {
+            @Override
+            public void insertString(FilterBypass bypass, int offset, String text, AttributeSet attributes) throws BadLocationException {
+                replace(bypass, offset, 0, text, attributes);
+            }
+
+            @Override
+            public void replace(FilterBypass bypass, int offset, int length, String text, AttributeSet attributes) throws BadLocationException {
+                String current = bypass.getDocument().getText(0, bypass.getDocument().getLength());
+                String next = current.substring(0, offset) + (text == null ? "" : text) + current.substring(offset + length);
+                if (next.matches("\\d{0,12}(\\.\\d{0,2})?")) {
+                    bypass.replace(offset, length, text, attributes);
+                }
+            }
+
+            @Override
+            public void remove(FilterBypass bypass, int offset, int length) throws BadLocationException {
+                bypass.remove(offset, length);
+            }
+        });
+        field.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent event) {
+                field.selectAll();
+            }
+        });
+        return field;
     }
 
     private void signOut() {

@@ -9,6 +9,15 @@ import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 
 public class AdminLogsFrame extends JFrame {
 
@@ -21,8 +30,21 @@ public class AdminLogsFrame extends JFrame {
     private final Color TEXT_MUTED = new Color(100, 116, 139);
     private final Color BORDER_COLOR = new Color(226, 232, 240);
     private final Color GOLD = new Color(207, 160, 48);
+    private final List<AuditLog> auditLogs = new ArrayList<>();
+    private DefaultTableModel auditModel;
+    private JTable auditTable;
+    private TableRowSorter<DefaultTableModel> auditSorter;
+    private JComboBox<String> dateFilter;
+    private JComboBox<String> moduleFilter;
+    private JComboBox<String> statusFilter;
+    private JLabel entriesLabel;
+    private JLabel pageLabel;
+    private int currentPage;
+    private int filteredAuditCount;
+    private static final int PAGE_SIZE = 10;
 
     public AdminLogsFrame() {
+        initializeAuditLogs();
         setTitle("REY SIS - System Audit Logs");
         setSize(1200, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -30,7 +52,22 @@ public class AdminLogsFrame extends JFrame {
         setLayout(new BorderLayout());
 
         add(createSidebar(), BorderLayout.WEST);
-        add(createMainContent(), BorderLayout.CENTER);
+        add(createDynamicMainContent(), BorderLayout.CENTER);
+    }
+
+    private void initializeAuditLogs() {
+        auditLogs.add(new AuditLog("Oct 5, 2026 09:35 AM", "admin.super", "192.168.1.105", "Updated Section Capacity", "Section OOP202-A", "Success", "Courses"));
+        auditLogs.add(new AuditLog("Oct 5, 2026 08:12 AM", "unknown_user", "112.204.15.8", "Failed Login Attempt", "Authentication Auth/Login", "Failed", "Auth"));
+        auditLogs.add(new AuditLog("Oct 4, 2026 04:45 PM", "registrar.main", "192.168.1.55", "Deleted Old Course Data", "Course ACC100 (Archived)", "Warning", "Courses"));
+        auditLogs.add(new AuditLog("Oct 4, 2026 02:30 PM", "faculty.smith", "192.168.2.14", "Exported Grade Sheet", "Section DBMS101-C", "Success", "Student"));
+        auditLogs.add(new AuditLog("Oct 3, 2026 11:20 AM", "admin.super", "192.168.1.105", "Approved Enrollment", "Student 2025-0013", "Success", "Student"));
+        auditLogs.add(new AuditLog("Oct 3, 2026 10:05 AM", "registrar.main", "192.168.1.55", "Updated Student Profile", "Student 2025-0011", "Success", "Student"));
+        auditLogs.add(new AuditLog("Oct 2, 2026 03:15 PM", "unknown_user", "112.204.15.8", "Failed Login Attempt", "Authentication Auth/Login", "Failed", "Auth"));
+        auditLogs.add(new AuditLog("Oct 2, 2026 01:40 PM", "admin.super", "192.168.1.105", "Added New Section", "Section OS301-A", "Success", "Courses"));
+        auditLogs.add(new AuditLog("Oct 1, 2026 04:10 PM", "faculty.smith", "192.168.2.14", "Viewed Student Records", "Masterlist", "Warning", "Student"));
+        auditLogs.add(new AuditLog("Oct 1, 2026 09:00 AM", "registrar.main", "192.168.1.55", "Signed In", "Admin Portal", "Success", "Auth"));
+        auditLogs.add(new AuditLog("Sep 30, 2026 02:20 PM", "admin.super", "192.168.1.105", "Edited Course Details", "Course DBMS101", "Success", "Courses"));
+        auditLogs.add(new AuditLog("Sep 29, 2026 08:45 AM", "unknown_user", "112.204.15.8", "Failed Login Attempt", "Authentication Auth/Login", "Failed", "Auth"));
     }
 
     private JPanel createSidebar() {
@@ -123,6 +160,181 @@ public class AdminLogsFrame extends JFrame {
         });
 
         return button;
+    }
+
+    private JPanel createDynamicMainContent() {
+        JPanel main = new JPanel(new BorderLayout(0, 20));
+        main.setBackground(Color.WHITE);
+        main.setBorder(new EmptyBorder(40, 40, 40, 40));
+
+        JPanel top = new JPanel(new BorderLayout());
+        top.setBackground(Color.WHITE);
+        JLabel title = new JLabel("System Audit Logs");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        title.setForeground(TEXT_DARK);
+        top.add(title, BorderLayout.WEST);
+        JButton export = new JButton("Export CSV");
+        export.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        export.setForeground(TEXT_DARK);
+        export.setBackground(Color.WHITE);
+        export.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER_COLOR),
+                new EmptyBorder(8, 20, 8, 20)));
+        export.setFocusPainted(false);
+        export.addActionListener(event -> exportAuditLogs());
+        top.add(export, BorderLayout.EAST);
+
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        filters.setBackground(Color.WHITE);
+        filters.setBorder(new EmptyBorder(20, 0, 20, 0));
+        dateFilter = createCombo(new String[]{"All Dates", "Oct 1 - Oct 5, 2026", "Sep 29 - Sep 30, 2026"}, 180);
+        moduleFilter = createCombo(new String[]{"All Modules", "Auth", "Courses", "Student"}, 150);
+        statusFilter = createCombo(new String[]{"All Statuses", "Success", "Failed", "Warning"}, 130);
+        JButton filter = new JButton("Filter");
+        filter.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        filter.setForeground(Color.WHITE);
+        filter.setBackground(BRAND_GREEN);
+        filter.setBorder(new EmptyBorder(9, 25, 9, 25));
+        filter.setFocusPainted(false);
+        filter.addActionListener(event -> applyAuditFilters());
+        filters.add(dateFilter); filters.add(moduleFilter); filters.add(statusFilter); filters.add(filter);
+
+        JPanel topSection = new JPanel(new BorderLayout());
+        topSection.setBackground(Color.WHITE);
+        topSection.add(top, BorderLayout.NORTH);
+        topSection.add(filters, BorderLayout.SOUTH);
+        main.add(topSection, BorderLayout.NORTH);
+
+        String[] columns = {"TIMESTAMP", "USER / IP", "ACTION DETAILS", "TARGET", "MODULE", "STATUS"};
+        auditModel = new DefaultTableModel(columns, 0) {
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        for (AuditLog log : auditLogs) {
+            auditModel.addRow(new Object[]{log.timestamp, log.user + "\n" + log.ip, log.action, log.target, log.module, log.status});
+        }
+        auditTable = new JTable(auditModel);
+        auditSorter = new TableRowSorter<>(auditModel);
+        auditTable.setRowSorter(auditSorter);
+        auditTable.setRowHeight(44);
+        auditTable.setShowGrid(false);
+        auditTable.setIntercellSpacing(new Dimension(0, 1));
+        auditTable.setFillsViewportHeight(true);
+        auditTable.getTableHeader().setPreferredSize(new Dimension(0, 42));
+        auditTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 11));
+        auditTable.getTableHeader().setForeground(TEXT_MUTED);
+        auditTable.getTableHeader().setBackground(BG_LIGHT);
+        int[] widths = {170, 150, 190, 190, 90, 90};
+        for (int index = 0; index < widths.length; index++) auditTable.getColumnModel().getColumn(index).setPreferredWidth(widths[index]);
+        JScrollPane tableScroll = new JScrollPane(auditTable);
+        tableScroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
+        main.add(tableScroll, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(new EmptyBorder(15, 0, 0, 0));
+        entriesLabel = new JLabel();
+        entriesLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        entriesLabel.setForeground(TEXT_MUTED);
+        footer.add(entriesLabel, BorderLayout.WEST);
+        JPanel pages = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        pages.setBackground(Color.WHITE);
+        JButton previous = createPageButton("<", false);
+        JButton next = createPageButton(">", false);
+        pageLabel = new JLabel("1");
+        pageLabel.setBorder(new EmptyBorder(8, 10, 8, 10));
+        previous.addActionListener(event -> changePage(-1));
+        next.addActionListener(event -> changePage(1));
+        pages.add(previous); pages.add(pageLabel); pages.add(next);
+        footer.add(pages, BorderLayout.EAST);
+        main.add(footer, BorderLayout.SOUTH);
+        applyAuditFilters();
+        return main;
+    }
+
+    private JComboBox<String> createCombo(String[] values, int width) {
+        JComboBox<String> combo = new JComboBox<>(values);
+        combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        combo.setForeground(TEXT_MUTED);
+        combo.setBackground(BG_LIGHT);
+        combo.setPreferredSize(new Dimension(width, 35));
+        return combo;
+    }
+
+    private void applyAuditFilters() {
+        currentPage = 0;
+        auditSorter.setRowFilter(createAuditFilter());
+        updateAuditFooter();
+    }
+
+    private RowFilter<DefaultTableModel, Integer> createAuditFilter() {
+        String date = String.valueOf(dateFilter.getSelectedItem());
+        String module = String.valueOf(moduleFilter.getSelectedItem());
+        String status = String.valueOf(statusFilter.getSelectedItem());
+        List<Integer> matchingRows = new ArrayList<>();
+        for (int index = 0; index < auditLogs.size(); index++) {
+            AuditLog log = auditLogs.get(index);
+            boolean dateMatch = date.equals("All Dates") || (date.startsWith("Oct") && log.timestamp.startsWith("Oct"))
+                    || (date.startsWith("Sep 29") && log.timestamp.startsWith("Sep 29"))
+                    || (date.startsWith("Sep 29") && log.timestamp.startsWith("Sep 30"));
+            boolean moduleMatch = module.equals("All Modules") || log.module.equals(module);
+            boolean statusMatch = status.equals("All Statuses") || log.status.equals(status);
+            if (dateMatch && moduleMatch && statusMatch) matchingRows.add(index);
+        }
+        filteredAuditCount = matchingRows.size();
+        int from = currentPage * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, matchingRows.size());
+        Set<Integer> visibleRows = new HashSet<>(matchingRows.subList(Math.min(from, to), to));
+        return new RowFilter<>() {
+            @Override
+            public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                return visibleRows.contains(entry.getIdentifier());
+            }
+        };
+    }
+
+    private void changePage(int direction) {
+        int totalPages = Math.max(1, (int) Math.ceil((double) filteredAuditCount / PAGE_SIZE));
+        currentPage = Math.max(0, Math.min(currentPage + direction, totalPages - 1));
+        auditSorter.setRowFilter(createAuditFilter());
+        updateAuditFooter();
+    }
+
+    private void updateAuditFooter() {
+        if (auditTable == null) return;
+        int total = filteredAuditCount;
+        int start = total == 0 ? 0 : currentPage * PAGE_SIZE + 1;
+        int end = Math.min(total, (currentPage + 1) * PAGE_SIZE);
+        entriesLabel.setText("Showing " + start + " to " + end + " of " + total + " entries");
+        pageLabel.setText(String.valueOf(currentPage + 1));
+    }
+
+    private void exportAuditLogs() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Export Audit Logs CSV");
+        chooser.setSelectedFile(new File("system-audit-logs.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        File file = chooser.getSelectedFile();
+        if (!file.getName().toLowerCase().endsWith(".csv")) file = new File(file.getParentFile(), file.getName() + ".csv");
+        try (FileWriter writer = new FileWriter(file)) {
+            writer.write("Timestamp,User,IP,Action,Target,Status\n");
+            for (int viewRow = 0; viewRow < auditTable.getRowCount(); viewRow++) {
+                AuditLog log = auditLogs.get(auditTable.convertRowIndexToModel(viewRow));
+                writer.write(csv(log.timestamp) + "," + csv(log.user) + "," + csv(log.ip) + ","
+                        + csv(log.action) + "," + csv(log.target) + "," + csv(log.status) + "\n");
+            }
+            JOptionPane.showMessageDialog(this, "Audit logs exported successfully.", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException exception) {
+            JOptionPane.showMessageDialog(this, "Unable to export audit logs: " + exception.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private String csv(String value) { return "\"" + value.replace("\"", "\"\"") + "\""; }
+
+    private static class AuditLog {
+        private final String timestamp, user, ip, action, target, status, module;
+        AuditLog(String timestamp, String user, String ip, String action, String target, String status, String module) {
+            this.timestamp = timestamp; this.user = user; this.ip = ip; this.action = action;
+            this.target = target; this.status = status; this.module = module;
+        }
     }
 
     private JPanel createMainContent() {
@@ -303,17 +515,16 @@ public class AdminLogsFrame extends JFrame {
         return pnl;
     }
 
-    private JPanel createPageButton(String text, boolean active) {
-        RoundedPanel btn = new RoundedPanel(5, active ? BRAND_GREEN : BG_LIGHT, active ? BRAND_GREEN : BORDER_COLOR);
-        btn.setPreferredSize(new Dimension(30, 30));
-        btn.setLayout(new GridBagLayout());
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        JLabel lbl = new JLabel(text);
-        lbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        lbl.setForeground(active ? Color.WHITE : TEXT_MUTED);
-        btn.add(lbl);
-        return btn;
+    private JButton createPageButton(String text, boolean active) {
+        JButton button = new JButton(text);
+        button.setPreferredSize(new Dimension(30, 30));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setForeground(active ? Color.WHITE : TEXT_MUTED);
+        button.setBackground(active ? BRAND_GREEN : BG_LIGHT);
+        button.setBorder(BorderFactory.createLineBorder(active ? BRAND_GREEN : BORDER_COLOR));
+        button.setFocusPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return button;
     }
 
     // --- Custom UI Component ---

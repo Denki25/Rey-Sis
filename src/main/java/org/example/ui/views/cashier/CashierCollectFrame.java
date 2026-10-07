@@ -5,9 +5,16 @@ import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CashierCollectFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -29,6 +36,16 @@ public class CashierCollectFrame {
 
     // Payment method active tracking button reference
     private JButton selectedPaymentBtn;
+    private final List<CollectStudent> students = new ArrayList<>();
+    private CollectStudent selectedStudent;
+    private double selectedBalanceAmount = 18250;
+    private ButtonGroup balanceGroup;
+    private JPanel balancesPanel;
+    private JLabel cashTenderedTitle;
+    private JLabel referenceTitle;
+    private JTextField referenceField;
+    private String selectedPaymentMethod = "Cash";
+    private static final AtomicInteger RECEIPT_SEQUENCE = new AtomicInteger(8800);
 
     public CashierCollectFrame() {
         this(null);
@@ -36,6 +53,7 @@ public class CashierCollectFrame {
 
     public CashierCollectFrame(Cashier cashier) {
         this.cashier = cashier;
+        initMockStudents();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
@@ -44,8 +62,26 @@ public class CashierCollectFrame {
         window.setContentPane(createContent());
     }
 
+    private void initMockStudents() {
+        students.add(new CollectStudent("2025-0011", "Justine Rivera", "BSIT", 18250, 4500));
+        students.add(new CollectStudent("2025-0042", "Maria Santos", "BSBA", 3200, 1800));
+        students.add(new CollectStudent("2025-0105", "Juan Dela Cruz", "BSCE", 15000, 2500));
+        selectedStudent = students.get(0);
+    }
+
     public void showWindow() {
         window.setVisible(true);
+    }
+
+    public void selectStudentById(String studentId) {
+        for (CollectStudent student : students) {
+            if (student.id.equals(studentId)) {
+                selectedStudent = student;
+                studentInfoLabel.setText(student.id + " | " + student.name);
+                refreshStudentBalances();
+                return;
+            }
+        }
     }
 
     private JPanel createContent() {
@@ -193,31 +229,6 @@ public class CashierCollectFrame {
         leftContainer.add(searchPanel);
         header.add(leftContainer, BorderLayout.WEST);
 
-        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 0));
-        rightControls.setOpaque(false);
-
-        JPanel userBadge = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        userBadge.setOpaque(false);
-
-        JLabel avatar = new JLabel(new VectorIcon(VectorIcon.Type.USER_AVATAR, MUTED));
-
-        JPanel userText = new JPanel();
-        userText.setOpaque(false);
-        userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Maria Santos");
-        userName.setFont(new Font("SansSerif", Font.BOLD, 12));
-        userName.setForeground(TEXT);
-        JLabel userSub = new JLabel("Cashier - Counter 03");
-        userSub.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        userSub.setForeground(MUTED);
-        userText.add(userName);
-        userText.add(userSub);
-        userBadge.add(avatar);
-        userBadge.add(userText);
-
-        header.add(rightControls, BorderLayout.EAST);
-        rightControls.add(userBadge);
-
         return header;
     }
 
@@ -284,12 +295,7 @@ public class CashierCollectFrame {
         changeBtn.setBorder(null);
         changeBtn.setContentAreaFilled(false);
         changeBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        changeBtn.addActionListener(e -> {
-            String input = JOptionPane.showInputDialog(window, "Enter Student ID or Name:", "Change Student", JOptionPane.QUESTION_MESSAGE);
-            if (input != null && !input.isBlank()) {
-                studentInfoLabel.setText(input + " | Justine Rivera");
-            }
-        });
+        changeBtn.addActionListener(e -> showStudentLookupDialog());
         selectStudentContainer.add(changeBtn, BorderLayout.EAST);
 
         selectStudentContainer.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
@@ -302,14 +308,28 @@ public class CashierCollectFrame {
         card.add(s2Title);
         card.add(Box.createVerticalStrut(8));
 
-        card.add(createSelectableBalanceRow("Tuition Fee - 1st Semester", "Due: Oct 10, 2026", "₱18,250", true));
-        card.add(Box.createVerticalStrut(10));
-        card.add(createSelectableBalanceRow("Miscellaneous Fees", "Due: Nov 15, 2026", "₱4,500", false));
+        balancesPanel = new JPanel();
+        balancesPanel.setOpaque(false);
+        balancesPanel.setLayout(new BoxLayout(balancesPanel, BoxLayout.Y_AXIS));
+        card.add(balancesPanel);
+        refreshStudentBalances();
 
         return card;
     }
 
-    private JPanel createSelectableBalanceRow(String title, String dueDate, String amount, boolean selected) {
+    private void refreshStudentBalances() {
+        if (balancesPanel == null || selectedStudent == null) return;
+        balancesPanel.removeAll();
+        balanceGroup = new ButtonGroup();
+        balancesPanel.add(createSelectableBalanceRow("Tuition Fee - 1st Semester", "Due: Oct 10, 2026", selectedStudent.tuitionBalance, true));
+        balancesPanel.add(Box.createVerticalStrut(10));
+        balancesPanel.add(createSelectableBalanceRow("Miscellaneous Fees", "Due: Nov 15, 2026", selectedStudent.miscellaneousBalance, false));
+        balancesPanel.revalidate();
+        balancesPanel.repaint();
+        selectBalance(selectedStudent.tuitionBalance);
+    }
+
+    private JPanel createSelectableBalanceRow(String title, String dueDate, double amount, boolean selected) {
         JPanel row = new JPanel(new BorderLayout());
         row.setBackground(new Color(250, 251, 249));
         row.setBorder(BorderFactory.createCompoundBorder(
@@ -323,6 +343,10 @@ public class CashierCollectFrame {
 
         JRadioButton radio = new JRadioButton();
         radio.setSelected(selected);
+        balanceGroup.add(radio);
+        radio.addItemListener(event -> {
+            if (radio.isSelected()) selectBalance(amount);
+        });
         radio.setOpaque(false);
         leftPart.add(radio);
 
@@ -341,12 +365,70 @@ public class CashierCollectFrame {
 
         row.add(leftPart, BorderLayout.WEST);
 
-        JLabel amtLbl = new JLabel(amount);
+        JLabel amtLbl = new JLabel(formatAmount(amount));
         amtLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
         amtLbl.setForeground(TEXT);
         row.add(amtLbl, BorderLayout.EAST);
 
         return row;
+    }
+
+    private void selectBalance(double amount) {
+        selectedBalanceAmount = amount;
+        totalAmountDueLabel.setText(formatAmount(amount));
+        updateChange();
+    }
+
+    private void showStudentLookupDialog() {
+        JDialog dialog = new JDialog(window, "Select Student", true);
+        JPanel content = new JPanel(new BorderLayout(0, 12));
+        content.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        JTextField search = new JTextField();
+        search.setToolTipText("Search by student ID or name");
+        content.add(search, BorderLayout.NORTH);
+        DefaultTableModel model = new DefaultTableModel(new Object[]{"STUDENT ID", "NAME", "PROGRAM"}, 0) {
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        for (CollectStudent student : students) model.addRow(new Object[]{student.id, student.name, student.program});
+        JTable table = new JTable(model);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        content.add(new JScrollPane(table), BorderLayout.CENTER);
+        JButton select = new JButton("Select Student");
+        select.addActionListener(event -> {
+            int row = table.getSelectedRow();
+            if (row < 0) {
+                JOptionPane.showMessageDialog(dialog, "Select a student first.", "Student Required", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            selectedStudent = students.get(row);
+            studentInfoLabel.setText(selectedStudent.id + " | " + selectedStudent.name);
+            refreshStudentBalances();
+            dialog.dispose();
+        });
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        footer.add(select);
+        content.add(footer, BorderLayout.SOUTH);
+        search.getDocument().addDocumentListener(new DocumentListener() {
+            private void filter() {
+                String query = search.getText().trim().toLowerCase(Locale.ROOT);
+                table.clearSelection();
+                for (int row = 0; row < model.getRowCount(); row++) {
+                    String id = String.valueOf(model.getValueAt(row, 0)).toLowerCase(Locale.ROOT);
+                    String name = String.valueOf(model.getValueAt(row, 1)).toLowerCase(Locale.ROOT);
+                    if (id.contains(query) || name.contains(query)) {
+                        table.setRowSelectionInterval(row, row);
+                        break;
+                    }
+                }
+            }
+            public void insertUpdate(DocumentEvent event) { filter(); }
+            public void removeUpdate(DocumentEvent event) { filter(); }
+            public void changedUpdate(DocumentEvent event) { filter(); }
+        });
+        dialog.setContentPane(content);
+        dialog.setSize(480, 340);
+        dialog.setLocationRelativeTo(window);
+        dialog.setVisible(true);
     }
 
     private JPanel createRightPaymentCard() {
@@ -403,7 +485,8 @@ public class CashierCollectFrame {
         card.add(methodsGrid);
         card.add(Box.createVerticalStrut(14));
 
-        JLabel tenderedTitle = new JLabel("CASH TENDERED");
+        cashTenderedTitle = new JLabel("CASH TENDERED");
+        JLabel tenderedTitle = cashTenderedTitle;
         tenderedTitle.setFont(new Font("SansSerif", Font.BOLD, 10));
         tenderedTitle.setForeground(MUTED);
         card.add(tenderedTitle);
@@ -416,6 +499,11 @@ public class CashierCollectFrame {
                 BorderFactory.createEmptyBorder(10, 12, 10, 12)
         ));
         amountTenderedField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        amountTenderedField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent event) { updateChange(); }
+            public void removeUpdate(DocumentEvent event) { updateChange(); }
+            public void changedUpdate(DocumentEvent event) { updateChange(); }
+        });
         card.add(amountTenderedField);
         card.add(Box.createVerticalStrut(12));
 
@@ -432,6 +520,22 @@ public class CashierCollectFrame {
         card.add(changeRow);
         card.add(Box.createVerticalStrut(20));
 
+        referenceTitle = new JLabel("REFERENCE / TRANSACTION NO.");
+        referenceTitle.setFont(new Font("SansSerif", Font.BOLD, 10));
+        referenceTitle.setForeground(MUTED);
+        referenceField = new JTextField();
+        referenceField.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        referenceField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER, 1, true),
+                BorderFactory.createEmptyBorder(10, 12, 10, 12)
+        ));
+        referenceTitle.setVisible(false);
+        referenceField.setVisible(false);
+        card.add(referenceTitle);
+        card.add(Box.createVerticalStrut(4));
+        card.add(referenceField);
+        card.add(Box.createVerticalStrut(12));
+
         JButton confirmBtn = new JButton("Confirm Payment");
         confirmBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
         confirmBtn.setForeground(Color.WHITE);
@@ -440,9 +544,7 @@ public class CashierCollectFrame {
         confirmBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         confirmBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
         confirmBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        confirmBtn.addActionListener(e -> {
-            JOptionPane.showMessageDialog(window, "Payment successfully processed and verified!", "REY SIS", JOptionPane.INFORMATION_MESSAGE);
-        });
+        confirmBtn.addActionListener(e -> processPayment());
         card.add(confirmBtn);
 
         return card;
@@ -460,9 +562,107 @@ public class CashierCollectFrame {
                 updateButtonStyle(selectedPaymentBtn, false);
             }
             selectedPaymentBtn = btn;
+            selectedPaymentMethod = text;
             updateButtonStyle(btn, true);
+            updatePaymentInputVisibility();
         });
         return btn;
+    }
+
+    private void updatePaymentInputVisibility() {
+        boolean cash = "Cash".equals(selectedPaymentMethod);
+        if (cashTenderedTitle != null) {
+            cashTenderedTitle.setText(cash ? "CASH TENDERED" : "PAYMENT CONFIRMATION");
+            cashTenderedTitle.setVisible(true);
+        }
+        if (amountTenderedField != null) amountTenderedField.setVisible(cash);
+        if (referenceTitle != null) referenceTitle.setVisible(!cash);
+        if (referenceField != null) referenceField.setVisible(!cash);
+        if (window.getContentPane() != null) {
+            window.getContentPane().revalidate();
+            window.getContentPane().repaint();
+        }
+    }
+
+    private void updateChange() {
+        double tendered = parseAmount(amountTenderedField.getText());
+        double change = Math.max(0, tendered - selectedBalanceAmount);
+        changeLabel.setText(formatAmount(change));
+    }
+
+    private void processPayment() {
+        if (selectedStudent == null) {
+            JOptionPane.showMessageDialog(window, "Select a student before processing payment.", "Student Required", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (selectedBalanceAmount <= 0) {
+            JOptionPane.showMessageDialog(window, "The selected balance has already been paid.", "No Balance Due", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        if ("Cash".equals(selectedPaymentMethod)) {
+            double tendered = parseAmount(amountTenderedField.getText());
+            if (tendered < selectedBalanceAmount) {
+                JOptionPane.showMessageDialog(window, "Cash tendered is less than the amount to pay.", "Insufficient Payment", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+        } else if (referenceField.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(window, "Enter the reference or transaction number.", "Reference Required", JOptionPane.WARNING_MESSAGE);
+            referenceField.requestFocusInWindow();
+            return;
+        }
+
+        double paidAmount = selectedBalanceAmount;
+        String orNumber = "OR-2026-" + RECEIPT_SEQUENCE.incrementAndGet();
+        if (selectedStudent.tuitionBalance == selectedBalanceAmount) selectedStudent.tuitionBalance = 0;
+        else selectedStudent.miscellaneousBalance = 0;
+        refreshStudentBalances();
+        showReceiptPreview(orNumber, paidAmount);
+    }
+
+    private void showReceiptPreview(String orNumber, double paidAmount) {
+        JDialog dialog = new JDialog(window, "Official Receipt", true);
+        JTextArea receipt = new JTextArea();
+        receipt.setEditable(false);
+        receipt.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        receipt.setText("REY SIS UNIVERSITY\nOFFICIAL PAYMENT RECEIPT\n\n"
+                + "OR Number: " + orNumber + "\n"
+                + "Student:   " + selectedStudent.name + "\n"
+                + "Student ID:" + selectedStudent.id + "\n"
+                + "Fee:       " + formatAmount(paidAmount) + "\n"
+                + "Method:    " + selectedPaymentMethod + "\n"
+                + "Amount:    " + formatAmount(paidAmount) + "\n\n"
+                + "Thank you for your payment.");
+        JButton print = new JButton("Print Receipt");
+        print.addActionListener(event -> {
+            try {
+                receipt.print();
+                JOptionPane.showMessageDialog(dialog, "Receipt sent to the printer.", "Print Receipt", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception exception) {
+                JOptionPane.showMessageDialog(dialog, "Unable to print receipt: " + exception.getMessage(), "Print Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        JButton close = new JButton("Close");
+        close.addActionListener(event -> dialog.dispose());
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actions.add(close);
+        actions.add(print);
+        JPanel content = new JPanel(new BorderLayout(0, 12));
+        content.setBorder(BorderFactory.createEmptyBorder(18, 22, 18, 22));
+        content.add(new JScrollPane(receipt), BorderLayout.CENTER);
+        content.add(actions, BorderLayout.SOUTH);
+        dialog.setContentPane(content);
+        dialog.setSize(430, 390);
+        dialog.setLocationRelativeTo(window);
+        dialog.setVisible(true);
+    }
+
+    private double parseAmount(String value) {
+        String numeric = value.replaceAll("[^0-9.,]", "").replace(",", "");
+        return numeric.isEmpty() ? 0 : Double.parseDouble(numeric);
+    }
+
+    private String formatAmount(double value) {
+        return String.format(Locale.US, "₱ %,.2f", value);
     }
 
     private void updateButtonStyle(JButton btn, boolean selected) {
@@ -487,6 +687,22 @@ public class CashierCollectFrame {
             return stream == null ? null : ImageIO.read(stream);
         } catch (Exception exception) {
             return null;
+        }
+    }
+
+    private static class CollectStudent {
+        final String id;
+        final String name;
+        final String program;
+        double tuitionBalance;
+        double miscellaneousBalance;
+
+        CollectStudent(String id, String name, String program, double tuitionBalance, double miscellaneousBalance) {
+            this.id = id;
+            this.name = name;
+            this.program = program;
+            this.tuitionBalance = tuitionBalance;
+            this.miscellaneousBalance = miscellaneousBalance;
         }
     }
 

@@ -5,11 +5,16 @@ import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class CashierStudentFrame {
     private static final Color DARK_GREEN = new Color(0, 47, 36);
@@ -22,6 +27,10 @@ public class CashierStudentFrame {
     private final JFrame window = new JFrame("REY SIS | Cashier - Student Ledger Accounts");
     private final Cashier cashier;
     private final List<StudentRowData> studentData = new ArrayList<>();
+    private DefaultTableModel studentModel;
+    private JTable studentTable;
+    private TableRowSorter<DefaultTableModel> studentSorter;
+    private JTextField searchField;
 
     public CashierStudentFrame() {
         this(null);
@@ -43,7 +52,7 @@ public class CashierStudentFrame {
     }
 
     private void initMockStudents() {
-        studentData.add(new StudentRowData("2025-0011", "Justine Rivera", "BSCS - 2nd Year", "₱ 18,250.00", "Pending Dues", new Color(218, 145, 33)));
+        studentData.add(new StudentRowData("2025-0011", "Justine Rivera", "BSIT - 3rd Year", "₱ 18,250.00", "Pending Dues", new Color(218, 145, 33)));
         studentData.add(new StudentRowData("2024-0187", "Angela D. Cruz", "BSBA - 3rd Year", "₱ 0.00", "Cleared", new Color(34, 139, 34)));
         studentData.add(new StudentRowData("2023-0744", "Lea Castillo", "BSED - 4th Year", "₱ 12,800.00", "Overdue", new Color(200, 50, 50)));
     }
@@ -102,10 +111,10 @@ public class CashierStudentFrame {
         navigation.setLayout(new BoxLayout(navigation, BoxLayout.Y_AXIS));
 
         // *** IMPORTANT: Change the 'true' flag below depending on which file you are in! ***
-        navigation.add(createNavigationButton("Dashboard", IconType.DASHBOARD, true));
+        navigation.add(createNavigationButton("Dashboard", IconType.DASHBOARD, false));
         navigation.add(createNavigationButton("Collect Payment", IconType.ENROLLMENT, false));
         navigation.add(createNavigationButton("Transaction", IconType.RECORDS, false));
-        navigation.add(createNavigationButton("Student Accounts", IconType.PROFILE, false));
+        navigation.add(createNavigationButton("Student Accounts", IconType.PROFILE, true));
         navigation.add(createNavigationButton("Reconciliation", IconType.RECONCILIATION, false));
         navigation.add(createNavigationButton("Reports", IconType.REPORTS, false));
         sidebar.add(navigation, BorderLayout.CENTER);
@@ -182,12 +191,17 @@ public class CashierStudentFrame {
         searchIcon.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         searchPanel.add(searchIcon, BorderLayout.WEST);
 
-        JTextField searchField = new JTextField("Search student ID, name, OR number...");
+        searchField = new JTextField("Search student ID, name, OR number...");
         searchField.setForeground(MUTED);
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 12));
         searchField.setBorder(null);
         searchField.setOpaque(false);
         searchField.setPreferredSize(new Dimension(350, 24));
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent event) { applyStudentFilter(); }
+            public void removeUpdate(DocumentEvent event) { applyStudentFilter(); }
+            public void changedUpdate(DocumentEvent event) { applyStudentFilter(); }
+        });
 
         searchField.addFocusListener(new java.awt.event.FocusAdapter() {
             public void focusGained(java.awt.event.FocusEvent evt) {
@@ -230,7 +244,6 @@ public class CashierStudentFrame {
         userBadge.add(avatar);
         userBadge.add(userText);
 
-        header.add(rightControls, BorderLayout.EAST);
         return header;
     }
 
@@ -264,6 +277,138 @@ public class CashierStudentFrame {
     }
 
     private JPanel createStudentTableCard() {
+        CardPanel card = new CardPanel(Color.WHITE);
+        card.setLayout(new BorderLayout(0, 12));
+        card.setBorder(BorderFactory.createEmptyBorder(16, 20, 16, 20));
+        studentModel = new DefaultTableModel(new Object[]{"STUDENT ID", "NAME", "PROGRAM / YEAR", "OUTSTANDING", "ACCOUNT STATUS"}, 0) {
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        for (StudentRowData data : studentData) {
+            studentModel.addRow(new Object[]{data.studentId, data.name, data.programYr, data.outstanding, data.status});
+        }
+        studentTable = new JTable(studentModel);
+        studentSorter = new TableRowSorter<>(studentModel);
+        studentTable.setRowSorter(studentSorter);
+        studentTable.setRowHeight(46);
+        studentTable.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        studentTable.setGridColor(new Color(242, 243, 240));
+        studentTable.setShowVerticalLines(false);
+        studentTable.getTableHeader().setPreferredSize(new Dimension(0, 36));
+        studentTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent event) {
+                if (event.getClickCount() == 2 && studentTable.getSelectedRow() >= 0) showLedger(studentAtSelectedRow());
+            }
+        });
+        card.add(new JScrollPane(studentTable), BorderLayout.CENTER);
+        return card;
+    }
+
+    private StudentRowData studentAtSelectedRow() {
+        int modelRow = studentTable.convertRowIndexToModel(studentTable.getSelectedRow());
+        return studentData.get(modelRow);
+    }
+
+    private void applyStudentFilter() {
+        if (studentSorter == null) return;
+        String query = searchField.getText().trim().toLowerCase(Locale.ROOT);
+        if (query.equals("search student id, name, or number...")) query = "";
+        String search = query;
+        studentSorter.setRowFilter(new RowFilter<DefaultTableModel, Integer>() {
+            public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                return search.isEmpty()
+                        || String.valueOf(entry.getValue(0)).toLowerCase(Locale.ROOT).contains(search)
+                        || String.valueOf(entry.getValue(1)).toLowerCase(Locale.ROOT).contains(search)
+                        || String.valueOf(entry.getValue(2)).toLowerCase(Locale.ROOT).contains(search);
+            }
+        });
+    }
+
+    private void showLedger(StudentRowData student) {
+        JDialog dialog = new JDialog(window, "Student Ledger Details", true);
+        JPanel content = new JPanel(new BorderLayout(0, 14));
+        content.setBorder(BorderFactory.createEmptyBorder(18, 22, 18, 22));
+        JLabel header = new JLabel("Student Ledger Details");
+        header.setFont(new Font("SansSerif", Font.BOLD, 20));
+        header.setForeground(DARK_GREEN);
+        content.add(header, BorderLayout.NORTH);
+
+        JPanel center = new JPanel();
+        center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+        JPanel info = new JPanel(new GridLayout(0, 2, 8, 6));
+        info.setBorder(BorderFactory.createTitledBorder("Student Information"));
+        info.add(new JLabel("Student ID")); info.add(new JLabel(student.studentId));
+        info.add(new JLabel("Full Name")); info.add(new JLabel(student.name));
+        info.add(new JLabel("Program & Year")); info.add(new JLabel(student.programYr));
+        info.add(new JLabel("Account Status")); info.add(new JLabel(student.status));
+        center.add(info);
+        center.add(Box.createVerticalStrut(10));
+
+        JLabel feesTitle = new JLabel("Itemized Fee History");
+        feesTitle.setFont(new Font("SansSerif", Font.BOLD, 13));
+        center.add(feesTitle);
+        DefaultTableModel fees = new DefaultTableModel(new Object[]{"FEE DESCRIPTION", "ASSESSMENT DATE", "ORIGINAL", "PAID", "BALANCE"}, 0);
+        double balance = parseAmount(student.outstanding);
+        fees.addRow(new Object[]{"Tuition Fee - 1st Semester", "Oct 01, 2026", formatAmount(balance + 12500), formatAmount(12500), formatAmount(balance)});
+        fees.addRow(new Object[]{"Miscellaneous Fees", "Oct 01, 2026", formatAmount(4500), formatAmount(student.status.equals("Cleared") ? 4500 : 0), formatAmount(student.status.equals("Cleared") ? 0 : 4500)});
+        JTable feesTable = new JTable(fees);
+        feesTable.setEnabled(false);
+        center.add(new JScrollPane(feesTable));
+        center.add(Box.createVerticalStrut(10));
+
+        JLabel transactionsTitle = new JLabel("Transaction Log");
+        transactionsTitle.setFont(new Font("SansSerif", Font.BOLD, 13));
+        center.add(transactionsTitle);
+        DefaultTableModel transactions = new DefaultTableModel(new Object[]{"DATE", "OR NUMBER", "METHOD", "AMOUNT PAID"}, 0);
+        transactions.addRow(new Object[]{"Oct 05, 2026", "OR-261005-126", "GCash", formatAmount(12500)});
+        transactions.addRow(new Object[]{"Sep 20, 2026", "OR-260920-102", "Cash", formatAmount(5000)});
+        JTable transactionTable = new JTable(transactions);
+        transactionTable.setEnabled(false);
+        center.add(new JScrollPane(transactionTable));
+        content.add(center, BorderLayout.CENTER);
+
+        JButton process = new JButton("Process Payment");
+        JButton print = new JButton("Print Statement of Account");
+        process.setBackground(DARK_GREEN); process.setForeground(Color.WHITE); process.setFocusPainted(false);
+        process.addActionListener(event -> {
+            dialog.dispose();
+            window.dispose();
+            CashierCollectFrame collect = new CashierCollectFrame(cashier);
+            collect.selectStudentById(student.studentId);
+            collect.showWindow();
+        });
+        print.addActionListener(event -> printStatement(student));
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actions.add(print); actions.add(process);
+        content.add(actions, BorderLayout.SOUTH);
+        dialog.setContentPane(content);
+        dialog.setSize(760, 650);
+        dialog.setLocationRelativeTo(window);
+        dialog.setVisible(true);
+    }
+
+    private void printStatement(StudentRowData student) {
+        JTextArea statement = new JTextArea("REY SIS UNIVERSITY\nSTATEMENT OF ACCOUNT\n\n"
+                + "Student: " + student.name + "\nStudent ID: " + student.studentId + "\n"
+                + "Program: " + student.programYr + "\n\nOutstanding Balance: " + student.outstanding);
+        statement.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        statement.setEditable(false);
+        try {
+            statement.print();
+        } catch (Exception exception) {
+            JOptionPane.showMessageDialog(window, "Unable to print statement: " + exception.getMessage(), "Print Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private double parseAmount(String value) {
+        String numeric = value.replaceAll("[^0-9.,]", "").replace(",", "");
+        return numeric.isEmpty() ? 0 : Double.parseDouble(numeric);
+    }
+
+    private String formatAmount(double value) {
+        return String.format(Locale.US, "₱ %,.2f", value);
+    }
+
+    private JPanel createLegacyStudentTableCard() {
         CardPanel card = new CardPanel(Color.WHITE);
         card.setLayout(new BorderLayout(0, 10));
         card.setBorder(BorderFactory.createEmptyBorder(16, 20, 16, 20));

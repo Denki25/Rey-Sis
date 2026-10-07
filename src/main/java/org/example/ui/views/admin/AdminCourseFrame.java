@@ -9,6 +9,8 @@ import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 public class AdminCourseFrame extends JFrame {
 
@@ -21,8 +23,17 @@ public class AdminCourseFrame extends JFrame {
     private final Color TEXT_MUTED = new Color(100, 116, 139);
     private final Color BORDER_COLOR = new Color(226, 232, 240);
     private final Color GOLD = new Color(207, 160, 48);
+    private final List<CourseData> courses = new ArrayList<>();
+    private JPanel catalogListPanel;
+    private JPanel sectionsPanel;
+    private JLabel selectedCourseTitle;
+    private JLabel selectedCourseSubtitle;
+    private JLabel activeSectionsTitle;
+    private JTextField courseSearchField;
+    private CourseData selectedCourse;
 
     public AdminCourseFrame() {
+        initializeCourses();
         setTitle("REY SIS - Courses & Sections");
         setSize(1200, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -31,6 +42,19 @@ public class AdminCourseFrame extends JFrame {
 
         add(createSidebar(), BorderLayout.WEST);
         add(createMainContent(), BorderLayout.CENTER);
+    }
+
+    private void initializeCourses() {
+        CourseData dbms = new CourseData("DBMS 101", "Database Management Systems", 4, "Computer Science", "1st Sem 2026-2027");
+        dbms.sections.add(new SectionData("Section A (DBMS101-A)", "MWF 08:00 AM - 09:30 AM", "Lab 3", "Prof. M. Santos", 42, 45));
+        dbms.sections.add(new SectionData("Section B (DBMS101-B)", "TTh 10:00 AM - 11:30 AM", "Lab 2", "Prof. R. Reyes", 45, 45));
+        dbms.sections.add(new SectionData("Section C (DBMS101-C)", "MWF 01:00 PM - 02:30 PM", "Rm 204", "Prof. M. Santos", 28, 45));
+        dbms.sections.add(new SectionData("Section D (DBMS101-D)", "SAT 09:00 AM - 12:00 PM", "Lab 1", "Prof. J. Cruz", 15, 45));
+        courses.add(dbms);
+        courses.add(new CourseData("OOP 202", "Object-Oriented Programming", 3, "Computer Science", "1st Sem 2026-2027"));
+        courses.add(new CourseData("OS 301", "Operating Systems", 3, "Computer Science", "1st Sem 2026-2027"));
+        courses.add(new CourseData("ACC 101", "Fundamentals of Accounting", 3, "Accountancy", "1st Sem 2026-2027"));
+        selectedCourse = dbms;
     }
 
     private JPanel createSidebar() {
@@ -142,21 +166,195 @@ public class AdminCourseFrame extends JFrame {
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         btnPanel.setBackground(Color.WHITE);
 
-        btnPanel.add(createPrimaryButton("+ Add Section", BRAND_GREEN, Color.WHITE, BRAND_GREEN));
-        btnPanel.add(createPrimaryButton("+ Add Course", Color.WHITE, BRAND_GREEN, BRAND_GREEN));
+        JButton addSection = createPrimaryButton("+ Add Section", BRAND_GREEN, Color.WHITE, BRAND_GREEN);
+        addSection.addActionListener(event -> showSectionDialog(null));
+        JButton addCourse = createPrimaryButton("+ Add Course", Color.WHITE, BRAND_GREEN, BRAND_GREEN);
+        addCourse.addActionListener(event -> showCourseDialog(null));
+        btnPanel.add(addSection);
+        btnPanel.add(addCourse);
         header.add(btnPanel, BorderLayout.EAST);
 
         // Split Content Area
         JPanel contentSplit = new JPanel(new BorderLayout(30, 0));
         contentSplit.setBackground(Color.WHITE);
 
-        contentSplit.add(createCourseCatalog(), BorderLayout.WEST);
-        contentSplit.add(createSectionDetails(), BorderLayout.CENTER);
+        contentSplit.add(createDynamicCourseCatalog(), BorderLayout.WEST);
+        contentSplit.add(createDynamicSectionDetails(), BorderLayout.CENTER);
 
         main.add(header, BorderLayout.NORTH);
         main.add(contentSplit, BorderLayout.CENTER);
 
         return main;
+    }
+
+    private JPanel createDynamicCourseCatalog() {
+        JPanel catalog = new JPanel(new BorderLayout(0, 15));
+        catalog.setBackground(Color.WHITE);
+        catalog.setPreferredSize(new Dimension(320, 0));
+        JLabel title = new JLabel("Course Catalog");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        catalog.add(title, BorderLayout.NORTH);
+
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBackground(Color.WHITE);
+        RoundedPanel searchBox = new RoundedPanel(10, BG_LIGHT, BORDER_COLOR);
+        searchBox.setLayout(new BorderLayout());
+        searchBox.setBorder(new EmptyBorder(8, 12, 8, 12));
+        searchBox.setMaximumSize(new Dimension(320, 40));
+        courseSearchField = new JTextField("Search course code or title...");
+        courseSearchField.setBorder(null);
+        courseSearchField.setOpaque(false);
+        courseSearchField.setForeground(TEXT_MUTED);
+        courseSearchField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        courseSearchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void filter() { refreshCatalog(); }
+            public void insertUpdate(javax.swing.event.DocumentEvent event) { filter(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent event) { filter(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent event) { filter(); }
+        });
+        courseSearchField.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent event) {
+                if (courseSearchField.getText().equals("Search course code or title...")) {
+                    courseSearchField.setText(""); courseSearchField.setForeground(TEXT_DARK);
+                }
+            }
+            public void focusLost(java.awt.event.FocusEvent event) {
+                if (courseSearchField.getText().trim().isEmpty()) {
+                    courseSearchField.setText("Search course code or title..."); courseSearchField.setForeground(TEXT_MUTED);
+                }
+            }
+        });
+        searchBox.add(new JLabel(new VectorIcon(IconType.SEARCH, TEXT_MUTED)), BorderLayout.WEST);
+        searchBox.add(courseSearchField, BorderLayout.CENTER);
+        content.add(searchBox);
+        content.add(Box.createVerticalStrut(15));
+        catalogListPanel = new JPanel();
+        catalogListPanel.setLayout(new BoxLayout(catalogListPanel, BoxLayout.Y_AXIS));
+        catalogListPanel.setBackground(Color.WHITE);
+        content.add(catalogListPanel);
+        JScrollPane scroll = new JScrollPane(content);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(14);
+        catalog.add(scroll, BorderLayout.CENTER);
+        refreshCatalog();
+        return catalog;
+    }
+
+    private void refreshCatalog() {
+        if (catalogListPanel == null) return;
+        catalogListPanel.removeAll();
+        String query = courseSearchField == null ? "" : courseSearchField.getText().trim().toLowerCase();
+        if (query.equals("search course code or title...")) query = "";
+        for (CourseData course : courses) {
+            if (!query.isEmpty() && !course.code.toLowerCase().contains(query)
+                    && !course.title.toLowerCase().contains(query)) continue;
+            catalogListPanel.add(createDynamicCourseCard(course, course == selectedCourse));
+            catalogListPanel.add(Box.createVerticalStrut(10));
+        }
+        catalogListPanel.revalidate();
+        catalogListPanel.repaint();
+    }
+
+    private JPanel createDynamicCourseCard(CourseData course, boolean active) {
+        JPanel card = createCourseCard(course.code, course.title, course.sections.size() + " Secs", active);
+        addClickListener(card, new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent event) {
+                selectCourse(course);
+            }
+        });
+        return card;
+    }
+
+    private void addClickListener(Component component, java.awt.event.MouseListener listener) {
+        component.addMouseListener(listener);
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) addClickListener(child, listener);
+        }
+    }
+
+    private void selectCourse(CourseData course) {
+        selectedCourse = course;
+        refreshCatalog();
+        refreshSectionDetails();
+    }
+
+    private JPanel createDynamicSectionDetails() {
+        JPanel details = new JPanel(new BorderLayout(0, 20));
+        details.setBackground(Color.WHITE);
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(Color.WHITE);
+        JPanel titlePanel = new JPanel(new GridLayout(2, 1, 0, 5));
+        titlePanel.setBackground(Color.WHITE);
+        selectedCourseTitle = new JLabel();
+        selectedCourseTitle.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        selectedCourseTitle.setForeground(TEXT_DARK);
+        selectedCourseSubtitle = new JLabel();
+        selectedCourseSubtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        selectedCourseSubtitle.setForeground(TEXT_MUTED);
+        titlePanel.add(selectedCourseTitle);
+        titlePanel.add(selectedCourseSubtitle);
+        JButton editCourse = new JButton("Edit Course");
+        editCourse.setForeground(BRAND_GREEN);
+        editCourse.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BRAND_GREEN));
+        editCourse.setContentAreaFilled(false);
+        editCourse.setFocusPainted(false);
+        editCourse.addActionListener(event -> showCourseDialog(selectedCourse));
+        header.add(titlePanel, BorderLayout.CENTER);
+        header.add(editCourse, BorderLayout.EAST);
+        details.add(header, BorderLayout.NORTH);
+        sectionsPanel = new JPanel();
+        sectionsPanel.setLayout(new BoxLayout(sectionsPanel, BoxLayout.Y_AXIS));
+        sectionsPanel.setBackground(Color.WHITE);
+        JPanel sectionContainer = new JPanel(new BorderLayout(0, 15));
+        sectionContainer.setBackground(Color.WHITE);
+        activeSectionsTitle = new JLabel();
+        activeSectionsTitle.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        activeSectionsTitle.setForeground(TEXT_DARK);
+        sectionContainer.add(activeSectionsTitle, BorderLayout.NORTH);
+        JScrollPane scroll = new JScrollPane(sectionsPanel);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(14);
+        sectionContainer.add(scroll, BorderLayout.CENTER);
+        details.add(sectionContainer, BorderLayout.CENTER);
+        refreshSectionDetails();
+        return details;
+    }
+
+    private void refreshSectionDetails() {
+        if (sectionsPanel == null || selectedCourse == null) return;
+        selectedCourseTitle.setText(selectedCourse.code + " — " + selectedCourse.title);
+        selectedCourseSubtitle.setText(selectedCourse.units + " Units | " + selectedCourse.department + " Dept | Term: " + selectedCourse.term);
+        activeSectionsTitle.setText("Active Sections (" + selectedCourse.sections.size() + ")");
+        sectionsPanel.removeAll();
+        for (SectionData section : selectedCourse.sections) {
+            sectionsPanel.add(createDynamicSectionCard(selectedCourse, section));
+            sectionsPanel.add(Box.createVerticalStrut(15));
+        }
+        sectionsPanel.revalidate();
+        sectionsPanel.repaint();
+    }
+
+    private JPanel createDynamicSectionCard(CourseData course, SectionData section) {
+        JPanel card = createSectionCard(section.name, section.isFull() ? "FULL" : "OPEN", section.schedule,
+                section.room, section.instructor, section.enrolled, section.capacity);
+        JButton edit = findButton(card, "Edit");
+        JButton students = findButton(card, "Students");
+        if (edit != null) edit.addActionListener(event -> showSectionDialog(section));
+        if (students != null) students.addActionListener(event -> showStudentsDialog(section));
+        return card;
+    }
+
+    private JButton findButton(Container container, String text) {
+        for (Component component : container.getComponents()) {
+            if (component instanceof JButton button && button.getText().equals(text)) return button;
+            if (component instanceof Container child) {
+                JButton result = findButton(child, text);
+                if (result != null) return result;
+            }
+        }
+        return null;
     }
 
     private JPanel createCourseCatalog() {
@@ -355,15 +553,8 @@ public class AdminCourseFrame extends JFrame {
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 0));
         actionPanel.setOpaque(false);
 
-        JLabel btnEdit = new JLabel("Edit");
-        btnEdit.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        btnEdit.setForeground(BRAND_GREEN);
-        btnEdit.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        JLabel btnStudents = new JLabel("Students");
-        btnStudents.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        btnStudents.setForeground(BRAND_GREEN);
-        btnStudents.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        JButton btnEdit = createLinkButton("Edit");
+        JButton btnStudents = createLinkButton("Students");
 
         actionPanel.add(btnEdit);
         actionPanel.add(btnStudents);
@@ -390,16 +581,157 @@ public class AdminCourseFrame extends JFrame {
         return card;
     }
 
-    private JPanel createPrimaryButton(String text, Color bg, Color fg, Color border) {
-        RoundedPanel btn = new RoundedPanel(8, bg, border);
-        btn.setBorder(new EmptyBorder(8, 20, 8, 20));
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    private JButton createLinkButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        button.setForeground(BRAND_GREEN);
+        button.setContentAreaFilled(false);
+        button.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BRAND_GREEN));
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return button;
+    }
 
-        JLabel lbl = new JLabel(text);
-        lbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        lbl.setForeground(fg);
-        btn.add(lbl);
-        return btn;
+    private JButton createPrimaryButton(String text, Color bg, Color fg, Color border) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        button.setForeground(fg);
+        button.setBackground(bg);
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(border), new EmptyBorder(8, 20, 8, 20)));
+        button.setFocusPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return button;
+    }
+
+    private void showCourseDialog(CourseData course) {
+        JTextField code = new JTextField(course == null ? "" : course.code);
+        JTextField title = new JTextField(course == null ? "" : course.title);
+        JTextField units = new JTextField(course == null ? "3" : String.valueOf(course.units));
+        JTextField department = new JTextField(course == null ? "" : course.department);
+        JTextField term = new JTextField(course == null ? "1st Sem 2026-2027" : course.term);
+        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
+        form.add(new JLabel("Code:")); form.add(code);
+        form.add(new JLabel("Title:")); form.add(title);
+        form.add(new JLabel("Units:")); form.add(units);
+        form.add(new JLabel("Department:")); form.add(department);
+        form.add(new JLabel("Term:")); form.add(term);
+        int result = JOptionPane.showConfirmDialog(this, form, course == null ? "Add Course" : "Edit Course",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+        try {
+            int unitCount = Integer.parseInt(units.getText().trim());
+            if (code.getText().trim().isEmpty() || title.getText().trim().isEmpty() || unitCount <= 0) throw new IllegalArgumentException();
+            if (course == null) {
+                CourseData newCourse = new CourseData(code.getText().trim(), title.getText().trim(), unitCount,
+                        department.getText().trim(), term.getText().trim());
+                courses.add(newCourse);
+                selectedCourse = newCourse;
+            } else {
+                course.code = code.getText().trim();
+                course.title = title.getText().trim();
+                course.units = unitCount;
+                course.department = department.getText().trim();
+                course.term = term.getText().trim();
+            }
+            refreshCatalog();
+            refreshSectionDetails();
+        } catch (IllegalArgumentException exception) {
+            JOptionPane.showMessageDialog(this, "Please enter valid course details and units.", "Invalid Course", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private void showSectionDialog(SectionData section) {
+        if (selectedCourse == null) return;
+        JTextField name = new JTextField(section == null ? "" : section.name);
+        JTextField schedule = new JTextField(section == null ? "" : section.schedule);
+        JTextField room = new JTextField(section == null ? "" : section.room);
+        JTextField instructor = new JTextField(section == null ? "" : section.instructor);
+        JTextField capacity = new JTextField(section == null ? "45" : String.valueOf(section.capacity));
+        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
+        form.add(new JLabel("Section Name:")); form.add(name);
+        form.add(new JLabel("Schedule:")); form.add(schedule);
+        form.add(new JLabel("Room:")); form.add(room);
+        form.add(new JLabel("Instructor:")); form.add(instructor);
+        form.add(new JLabel("Max Capacity:")); form.add(capacity);
+        int result = JOptionPane.showConfirmDialog(this, form, section == null ? "Add Section" : "Edit Section",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+        try {
+            int max = Integer.parseInt(capacity.getText().trim());
+            if (name.getText().trim().isEmpty() || max <= 0) throw new IllegalArgumentException();
+            if (section == null) {
+                selectedCourse.sections.add(new SectionData(name.getText().trim(), schedule.getText().trim(),
+                        room.getText().trim(), instructor.getText().trim(), 0, max));
+            } else {
+                section.name = name.getText().trim();
+                section.schedule = schedule.getText().trim();
+                section.room = room.getText().trim();
+                section.instructor = instructor.getText().trim();
+                section.capacity = max;
+            }
+            refreshCatalog();
+            refreshSectionDetails();
+        } catch (IllegalArgumentException exception) {
+            JOptionPane.showMessageDialog(this, "Please enter valid section details and capacity.", "Invalid Section", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private void showStudentsDialog(SectionData section) {
+        String[] columns = {"STUDENT ID", "FULL NAME", "PROGRAM"};
+        Object[][] students = {
+                {"2025-0011", "Justine Rivera", "BS Information Technology"},
+                {"2025-0012", "Mark Mendoza", "BS Civil Engineering"},
+                {"2025-0013", "Prince Cariaga", "BS Information Technology"}
+        };
+        int count = Math.min(section.enrolled, students.length);
+        Object[][] visibleStudents = new Object[count][3];
+        System.arraycopy(students, 0, visibleStudents, 0, count);
+        JTable table = new JTable(new javax.swing.table.DefaultTableModel(visibleStudents, columns) {
+            public boolean isCellEditable(int row, int column) { return false; }
+        });
+        table.setRowHeight(30);
+        table.setFillsViewportHeight(true);
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setPreferredSize(new Dimension(480, 180));
+        JOptionPane.showMessageDialog(this, scroll, "Students - " + section.name, JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private static class CourseData {
+        private String code;
+        private String title;
+        private int units;
+        private String department;
+        private String term;
+        private final List<SectionData> sections = new ArrayList<>();
+
+        CourseData(String code, String title, int units, String department, String term) {
+            this.code = code;
+            this.title = title;
+            this.units = units;
+            this.department = department;
+            this.term = term;
+        }
+    }
+
+    private static class SectionData {
+        private String name;
+        private String schedule;
+        private String room;
+        private String instructor;
+        private int enrolled;
+        private int capacity;
+
+        SectionData(String name, String schedule, String room, String instructor, int enrolled, int capacity) {
+            this.name = name;
+            this.schedule = schedule;
+            this.room = room;
+            this.instructor = instructor;
+            this.enrolled = enrolled;
+            this.capacity = capacity;
+        }
+
+        boolean isFull() { return enrolled >= capacity; }
     }
 
     // --- Custom UI Components ---
@@ -495,7 +827,7 @@ public class AdminCourseFrame extends JFrame {
     }
 
     public enum IconType {
-        HOME, LIST, WINDOW, LAYOUT, USER_OUTLINE, LOGOUT
+        HOME, LIST, WINDOW, LAYOUT, USER_OUTLINE, LOGOUT, SEARCH
     }
 
     private static class VectorIcon implements javax.swing.Icon {
@@ -541,6 +873,10 @@ public class AdminCourseFrame extends JFrame {
                 case LOGOUT -> {
                     g.drawRect(x+5, y+3, 12, 14);
                     g.drawLine(x+1, y+10, x+8, y+10);
+                }
+                case SEARCH -> {
+                    g.drawOval(x + 3, y + 3, 10, 10);
+                    g.drawLine(x + 12, y + 12, x + 18, y + 18);
                 }
             }
             g.dispose();

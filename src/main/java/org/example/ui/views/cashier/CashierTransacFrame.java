@@ -5,11 +5,18 @@ import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class CashierTransacFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -23,6 +30,17 @@ public class CashierTransacFrame {
     private final JFrame window = new JFrame("REY SIS | Cashier - Transactions History");
     private final Cashier cashier;
     private final List<TransactionRowData> transactionsData = new ArrayList<>();
+    private DefaultTableModel transactionModel;
+    private JTable transactionTable;
+    private TableRowSorter<DefaultTableModel> transactionSorter;
+    private JTextField searchField;
+    private JComboBox<String> dateFilter;
+    private JComboBox<String> methodFilter;
+    private JComboBox<String> statusFilter;
+    private JLabel paginationInfo;
+    private int currentPage = 1;
+    private int filteredCount;
+    private static final int PAGE_SIZE = 10;
 
     public CashierTransacFrame() {
         this(null);
@@ -104,9 +122,9 @@ public class CashierTransacFrame {
         navigation.setLayout(new BoxLayout(navigation, BoxLayout.Y_AXIS));
 
         // *** IMPORTANT: Change the 'true' flag below depending on which file you are in! ***
-        navigation.add(createNavigationButton("Dashboard", IconType.DASHBOARD, true));
+        navigation.add(createNavigationButton("Dashboard", IconType.DASHBOARD, false));
         navigation.add(createNavigationButton("Collect Payment", IconType.ENROLLMENT, false));
-        navigation.add(createNavigationButton("Transaction", IconType.RECORDS, false));
+        navigation.add(createNavigationButton("Transaction", IconType.RECORDS, true));
         navigation.add(createNavigationButton("Student Accounts", IconType.PROFILE, false));
         navigation.add(createNavigationButton("Reconciliation", IconType.RECONCILIATION, false));
         navigation.add(createNavigationButton("Reports", IconType.REPORTS, false));
@@ -184,12 +202,17 @@ public class CashierTransacFrame {
         searchIcon.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         searchPanel.add(searchIcon, BorderLayout.WEST);
 
-        JTextField searchField = new JTextField("Search student ID, name, OR number...");
+        searchField = new JTextField("Search student ID, name, OR number...");
         searchField.setForeground(TEXT);
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 12));
         searchField.setBorder(null);
         searchField.setOpaque(false);
         searchField.setPreferredSize(new Dimension(350, 24));
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent event) { resetAndFilter(); }
+            public void removeUpdate(DocumentEvent event) { resetAndFilter(); }
+            public void changedUpdate(DocumentEvent event) { resetAndFilter(); }
+        });
         searchPanel.add(searchField, BorderLayout.CENTER);
 
         JPanel leftContainer = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -219,13 +242,90 @@ public class CashierTransacFrame {
         userBadge.add(avatar);
         userBadge.add(userText);
 
-        header.add(rightControls, BorderLayout.EAST);
         rightControls.add(userBadge);
 
         return header;
     }
 
     private JPanel createBody() {
+        JPanel body = new JPanel(new BorderLayout());
+        body.setBackground(PAGE);
+        body.setBorder(BorderFactory.createEmptyBorder(20, 28, 28, 28));
+
+        JLabel heading = new JLabel("Transactions Masterlist");
+        heading.setFont(new Font("Serif", Font.BOLD, 26));
+        heading.setForeground(DEEP_GREEN);
+
+        CardPanel card = new CardPanel(Color.WHITE);
+        card.setLayout(new BorderLayout(0, 14));
+        card.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+
+        JPanel filterWrapper = new JPanel(new BorderLayout(10, 0));
+        filterWrapper.setOpaque(false);
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        filters.setOpaque(false);
+        JLabel filterLabel = new JLabel("Filter by:");
+        filterLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        filterLabel.setForeground(TEXT);
+        filters.add(filterLabel);
+        dateFilter = createFilterCombo(new String[]{"Date: All", "Date: Today"});
+        methodFilter = createFilterCombo(new String[]{"Method: All", "Method: Cash", "Method: GCash", "Method: Card", "Method: Bank"});
+        statusFilter = createFilterCombo(new String[]{"Status: All", "Status: Paid", "Status: Partial", "Status: Pending", "Status: Voided"});
+        filters.add(dateFilter); filters.add(methodFilter); filters.add(statusFilter);
+        filterWrapper.add(filters, BorderLayout.WEST);
+
+        JButton export = new JButton("Export !");
+        export.setFocusPainted(false);
+        export.setForeground(DEEP_GREEN);
+        export.addActionListener(event -> exportTransactions());
+        filterWrapper.add(export, BorderLayout.EAST);
+        card.add(filterWrapper, BorderLayout.NORTH);
+
+        transactionModel = new DefaultTableModel(new Object[]{"TIME", "STUDENT", "STUDENT ID", "RECEIPT NO.", "METHOD", "AMOUNT", "STATUS", "ACTION"}, 0) {
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        for (TransactionRowData data : transactionsData) {
+            transactionModel.addRow(new Object[]{data.time, data.studentName, data.studentId, data.receiptNo, data.method, data.amount, data.status, "..."});
+        }
+        transactionTable = new JTable(transactionModel);
+        transactionSorter = new TableRowSorter<>(transactionModel);
+        transactionTable.setRowSorter(transactionSorter);
+        transactionTable.setRowHeight(42);
+        transactionTable.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        transactionTable.setGridColor(new Color(242, 243, 240));
+        transactionTable.setShowVerticalLines(false);
+        transactionTable.getTableHeader().setPreferredSize(new Dimension(0, 34));
+        transactionTable.getColumnModel().getColumn(7).setPreferredWidth(55);
+        transactionTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mousePressed(java.awt.event.MouseEvent event) { showActionMenu(event); }
+            public void mouseReleased(java.awt.event.MouseEvent event) { showActionMenu(event); }
+        });
+        card.add(new JScrollPane(transactionTable), BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setOpaque(false);
+        paginationInfo = new JLabel();
+        paginationInfo.setForeground(MUTED);
+        footer.add(paginationInfo, BorderLayout.WEST);
+        JPanel pages = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        pages.setOpaque(false);
+        JButton previous = new JButton("<");
+        JButton next = new JButton(">");
+        previous.addActionListener(event -> changePage(-1));
+        next.addActionListener(event -> changePage(1));
+        pages.add(previous); pages.add(next);
+        footer.add(pages, BorderLayout.EAST);
+        card.add(footer, BorderLayout.SOUTH);
+        body.add(heading, BorderLayout.NORTH);
+        body.add(card, BorderLayout.CENTER);
+        dateFilter.addActionListener(event -> resetAndFilter());
+        methodFilter.addActionListener(event -> resetAndFilter());
+        statusFilter.addActionListener(event -> resetAndFilter());
+        rebuildTransactionFilter();
+        return body;
+    }
+
+    private JPanel createLegacyBody() {
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBackground(PAGE);
@@ -393,6 +493,134 @@ public class CashierTransacFrame {
 
         body.add(card);
         return body;
+    }
+
+    private JComboBox<String> createFilterCombo(String[] values) {
+        JComboBox<String> combo = new JComboBox<>(values);
+        combo.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        combo.setForeground(TEXT);
+        combo.setBackground(Color.WHITE);
+        combo.setFocusable(false);
+        return combo;
+    }
+
+    private void resetAndFilter() {
+        currentPage = 1;
+        rebuildTransactionFilter();
+    }
+
+    private void rebuildTransactionFilter() {
+        if (transactionSorter == null) return;
+        String query = searchField == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
+        if (query.equals("search student id, name, or number...")) query = "";
+        String date = dateFilter == null ? "Date: All" : String.valueOf(dateFilter.getSelectedItem());
+        String method = methodFilter == null ? "Method: All" : String.valueOf(methodFilter.getSelectedItem());
+        String status = statusFilter == null ? "Status: All" : String.valueOf(statusFilter.getSelectedItem());
+        String search = query;
+        filteredCount = 0;
+        transactionSorter.setRowFilter(new RowFilter<DefaultTableModel, Integer>() {
+            public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                String time = String.valueOf(entry.getValue(0));
+                String student = String.valueOf(entry.getValue(1)).toLowerCase(Locale.ROOT);
+                String id = String.valueOf(entry.getValue(2)).toLowerCase(Locale.ROOT);
+                String receipt = String.valueOf(entry.getValue(3)).toLowerCase(Locale.ROOT);
+                String rowMethod = String.valueOf(entry.getValue(4));
+                String rowStatus = String.valueOf(entry.getValue(6));
+                boolean matchesSearch = search.isEmpty() || student.contains(search) || id.contains(search) || receipt.contains(search);
+                boolean matchesDate = !"Date: Today".equals(date) || !time.toLowerCase(Locale.ROOT).contains("yesterday");
+                boolean matchesMethod = "Method: All".equals(method) || method.endsWith(rowMethod);
+                boolean matchesStatus = "Status: All".equals(status) || status.endsWith(rowStatus);
+                if (!matchesSearch || !matchesDate || !matchesMethod || !matchesStatus) return false;
+                int matchIndex = filteredCount++;
+                int first = (currentPage - 1) * PAGE_SIZE;
+                return matchIndex >= first && matchIndex < first + PAGE_SIZE;
+            }
+        });
+        updatePaginationInfo();
+    }
+
+    private void updatePaginationInfo() {
+        if (paginationInfo == null) return;
+        int start = filteredCount == 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+        int end = Math.min(currentPage * PAGE_SIZE, filteredCount);
+        paginationInfo.setText("Showing " + start + " to " + end + " of " + filteredCount + " entries");
+    }
+
+    private void changePage(int direction) {
+        int pageCount = Math.max(1, (filteredCount + PAGE_SIZE - 1) / PAGE_SIZE);
+        currentPage = Math.max(1, Math.min(pageCount, currentPage + direction));
+        rebuildTransactionFilter();
+    }
+
+    private TransactionRowData transactionAtViewRow(int viewRow) {
+        int modelRow = transactionTable.convertRowIndexToModel(viewRow);
+        return transactionsData.get(modelRow);
+    }
+
+    private void showActionMenu(java.awt.event.MouseEvent event) {
+        if (transactionTable == null || !SwingUtilities.isLeftMouseButton(event) && !SwingUtilities.isRightMouseButton(event)) return;
+        int row = transactionTable.rowAtPoint(event.getPoint());
+        int column = transactionTable.columnAtPoint(event.getPoint());
+        if (row < 0 || column != 7) return;
+        transactionTable.setRowSelectionInterval(row, row);
+        TransactionRowData transaction = transactionAtViewRow(row);
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem view = new JMenuItem("View Receipt");
+        JMenuItem voidItem = new JMenuItem("Void Transaction");
+        view.addActionListener(action -> showReceipt(transaction));
+        voidItem.addActionListener(action -> voidTransaction(transaction));
+        menu.add(view);
+        menu.add(voidItem);
+        menu.show(transactionTable, event.getX(), event.getY());
+    }
+
+    private void showReceipt(TransactionRowData transaction) {
+        JTextArea receipt = new JTextArea("REY SIS UNIVERSITY\nOFFICIAL PAYMENT RECEIPT\n\n"
+                + "Receipt No.: " + transaction.receiptNo + "\n"
+                + "Student:     " + transaction.studentName + "\n"
+                + "Student ID:  " + transaction.studentId + "\n"
+                + "Payment:     " + transaction.amount + "\n"
+                + "Method:      " + transaction.method + "\n"
+                + "Status:      " + transaction.status + "\n"
+                + "Time:        " + transaction.time);
+        receipt.setEditable(false);
+        receipt.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        JOptionPane.showMessageDialog(window, new JScrollPane(receipt), "View Receipt", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void voidTransaction(TransactionRowData transaction) {
+        int choice = JOptionPane.showConfirmDialog(window,
+                "Void transaction " + transaction.receiptNo + "? This requires cashier override.",
+                "Void Transaction", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice == JOptionPane.YES_OPTION) {
+            transaction.status = "Voided";
+            int modelRow = transactionsData.indexOf(transaction);
+            transactionModel.setValueAt("Voided", modelRow, 6);
+            rebuildTransactionFilter();
+            JOptionPane.showMessageDialog(window, "Transaction marked as Voided.", "Transaction Updated", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    private void exportTransactions() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File("rey-sis-transactions.csv"));
+        if (chooser.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return;
+        try (PrintWriter writer = new PrintWriter(chooser.getSelectedFile(), StandardCharsets.UTF_8)) {
+            writer.println("TIME,STUDENT,STUDENT ID,RECEIPT NO.,METHOD,AMOUNT,STATUS");
+            for (int row = 0; row < transactionTable.getRowCount(); row++) {
+                int modelRow = transactionTable.convertRowIndexToModel(row);
+                TransactionRowData data = transactionsData.get(modelRow);
+                writer.println(csv(data.time) + "," + csv(data.studentName) + "," + csv(data.studentId) + ","
+                        + csv(data.receiptNo) + "," + csv(data.method) + "," + csv(data.amount) + "," + csv(data.status));
+            }
+            JOptionPane.showMessageDialog(window, "Transactions exported successfully.", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception exception) {
+            JOptionPane.showMessageDialog(window, "Unable to export transactions: " + exception.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private String csv(String value) {
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
     private JPanel createDropdownFilter(String text) {

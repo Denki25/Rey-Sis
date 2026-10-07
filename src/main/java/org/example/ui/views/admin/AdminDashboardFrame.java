@@ -22,8 +22,16 @@ public class AdminDashboardFrame {
     private static final Color STAT_GREEN_BG = new Color(236, 245, 241);
     private static final Color STAT_YELLOW_BG = new Color(253, 248, 237);
     private final JFrame window = new JFrame("REY SIS | Admin Dashboard");
+    private final DefaultListModel<String> taskModel = new DefaultListModel<>();
+    private String adminName = "Dr. Maria Santos";
+    private String adminRole = "Chief Registrar";
+    private JLabel adminHeaderName;
+    private JLabel adminHeaderRole;
 
     public AdminDashboardFrame() {
+        taskModel.addElement("Clear pending IT validations");
+        taskModel.addElement("Merge overlapping BSCE sections");
+        taskModel.addElement("Export weekly enrollment audit report");
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1280, 800));
         window.setSize(1360, 900);
@@ -151,7 +159,7 @@ public class AdminDashboardFrame {
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 235, 240)));
         header.setPreferredSize(new Dimension(0, 70));
 
-        JLabel title = new JLabel("Student Masterlist");
+        JLabel title = new JLabel("Admin Dashboard");
         title.setFont(new Font("SansSerif", Font.BOLD, 18));
         title.setForeground(SIDEBAR_BG);
         title.setBorder(BorderFactory.createEmptyBorder(0, 30, 0, 0));
@@ -198,11 +206,13 @@ public class AdminDashboardFrame {
         profileText.setLayout(new BoxLayout(profileText, BoxLayout.Y_AXIS));
         profileText.setOpaque(false);
 
-        JLabel name = new JLabel("Dr. Maria Santos");
+        adminHeaderName = new JLabel(adminName);
+        JLabel name = adminHeaderName;
         name.setFont(new Font("SansSerif", Font.BOLD, 13));
         name.setForeground(TEXT_DARK);
 
-        JLabel role = new JLabel("Registrar - 99-001");
+        adminHeaderRole = new JLabel(adminRole + " - 99-001");
+        JLabel role = adminHeaderRole;
         role.setFont(new Font("SansSerif", Font.PLAIN, 11));
         role.setForeground(TEXT_MUTED);
 
@@ -273,8 +283,8 @@ public class AdminDashboardFrame {
         textPanel.add(valLabel, BorderLayout.CENTER);
 
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        titleLabel.setForeground(TEXT_MUTED);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
+        titleLabel.setForeground(new Color(74, 88, 101));
         textPanel.add(titleLabel, BorderLayout.SOUTH);
 
         card.add(textPanel, BorderLayout.CENTER);
@@ -332,48 +342,89 @@ public class AdminDashboardFrame {
         queueList.add(createQueueRow("Prince Cariaga", "2025-0013", "BS Information Technology", "3rd Year", "Conflict", new Color(231, 76, 60)));
         left.add(queueList, gbc);
 
-        // Bottom Split (Announcements and Tasks)
+        // My Tasks spans the full width below the validation queue.
         gbc.gridy = 2;
         gbc.insets = new Insets(0, 0, 0, 0);
+        left.add(createTasksPanel(), gbc);
+        return left;
+    }
 
-        JPanel bottomSplit = new JPanel(new GridLayout(1, 2, 30, 0));
-        bottomSplit.setOpaque(false);
-
-        // Announcements
-        JPanel announcements = new JPanel(new BorderLayout(0, 15));
-        announcements.setOpaque(false);
-        announcements.add(createSectionHeader("System Announcements", null), BorderLayout.NORTH);
-
-        JPanel annList = new JPanel();
-        annList.setLayout(new BoxLayout(annList, BoxLayout.Y_AXIS));
-        annList.setOpaque(false);
-        annList.add(createAnnouncement("Late enrollment penalty activates next week.", "Oct 5, 2025"));
-        annList.add(Box.createVerticalStrut(12));
-        annList.add(createAnnouncement("Server maintenance scheduled for Saturday 8PM.", "Oct 4, 2025"));
-        annList.add(Box.createVerticalStrut(12));
-        annList.add(createAnnouncement("IT Department updated ComSci curriculum codes.", "Oct 2, 2025"));
-        announcements.add(annList, BorderLayout.CENTER);
-
-        // Tasks
+    private JPanel createTasksPanel() {
         JPanel tasks = new JPanel(new BorderLayout(0, 15));
         tasks.setOpaque(false);
-        tasks.add(createSectionHeader("My Tasks", null), BorderLayout.NORTH);
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+        header.add(createSectionHeader("My Tasks", null), BorderLayout.WEST);
+        JButton addTask = new JButton("+ Add Task");
+        addTask.setFont(new Font("SansSerif", Font.BOLD, 11));
+        addTask.setForeground(SIDEBAR_BG);
+        addTask.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, SIDEBAR_BG));
+        addTask.setContentAreaFilled(false);
+        addTask.setFocusPainted(false);
+        addTask.addActionListener(event -> addTask());
+        header.add(addTask, BorderLayout.EAST);
+        tasks.add(header, BorderLayout.NORTH);
 
         JPanel taskList = new JPanel();
         taskList.setLayout(new BoxLayout(taskList, BoxLayout.Y_AXIS));
         taskList.setOpaque(false);
-        taskList.add(createTaskRow("Clear pending IT validations", "Due Oct 10"));
-        taskList.add(Box.createVerticalStrut(12));
-        taskList.add(createTaskRow("Merge overlapping BSCE sections", "Due Oct 15"));
-        taskList.add(Box.createVerticalStrut(12));
-        taskList.add(createTaskRow("Export weekly enrollment audit report", null));
+        refreshTaskList(taskList);
+        taskModel.addListDataListener(new javax.swing.event.ListDataListener() {
+            @Override
+            public void intervalAdded(javax.swing.event.ListDataEvent event) {
+                refreshTaskList(taskList);
+            }
+
+            @Override
+            public void intervalRemoved(javax.swing.event.ListDataEvent event) {
+                refreshTaskList(taskList);
+            }
+
+            @Override
+            public void contentsChanged(javax.swing.event.ListDataEvent event) {
+                refreshTaskList(taskList);
+            }
+        });
         tasks.add(taskList, BorderLayout.CENTER);
+        return tasks;
+    }
 
-        bottomSplit.add(announcements);
-        bottomSplit.add(tasks);
+    private void addTask() {
+        String title = JOptionPane.showInputDialog(window, "Enter task title:", "Add Admin Task", JOptionPane.PLAIN_MESSAGE);
+        if (title != null && !title.trim().isEmpty()) {
+            taskModel.addElement(title.trim());
+        }
+    }
 
-        left.add(bottomSplit, gbc);
-        return left;
+    private void refreshTaskList(JPanel taskList) {
+        taskList.removeAll();
+        for (int index = 0; index < taskModel.size(); index++) {
+            String task = taskModel.getElementAt(index);
+            JPanel row = new JPanel(new BorderLayout());
+            row.setOpaque(false);
+            row.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
+            JCheckBox checkBox = new JCheckBox();
+            checkBox.setOpaque(false);
+            checkBox.setFocusPainted(false);
+            JLabel taskLabel = new JLabel(task);
+            taskLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+            taskLabel.setForeground(TEXT_DARK);
+            checkBox.addActionListener(event -> {
+                if (checkBox.isSelected()) {
+                    taskLabel.setText("<html><strike>" + task + "</strike></html>");
+                    taskLabel.setForeground(TEXT_MUTED);
+                } else {
+                    taskLabel.setText(task);
+                    taskLabel.setForeground(TEXT_DARK);
+                }
+            });
+            row.add(checkBox, BorderLayout.WEST);
+            row.add(taskLabel, BorderLayout.CENTER);
+            taskList.add(row);
+        }
+        taskList.revalidate();
+        taskList.repaint();
     }
 
     private JPanel createRightContentArea() {
@@ -427,10 +478,21 @@ public class AdminDashboardFrame {
         header.add(t, BorderLayout.WEST);
 
         if (action != null) {
-            JLabel a = new JLabel(action);
+            JButton a = new JButton(action);
             a.setFont(new Font("SansSerif", Font.BOLD, 12));
-            a.setForeground(TEXT_MUTED);
+            a.setForeground(SIDEBAR_BG);
+            a.setContentAreaFilled(false);
+            a.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, SIDEBAR_BG));
+            a.setFocusPainted(false);
             a.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            if (action.equals("View Full Queue \u2192")) {
+                a.addActionListener(event -> {
+                    window.dispose();
+                    new AdminValidationFrame().showWindow();
+                });
+            } else if (action.equals("Edit Profile")) {
+                a.addActionListener(event -> showEditProfileDialog());
+            }
             header.add(a, BorderLayout.EAST);
         }
         return header;
@@ -504,6 +566,12 @@ public class AdminDashboardFrame {
         action.setFont(new Font("SansSerif", Font.BOLD, 12));
         action.setForeground(SIDEBAR_BG);
         action.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        action.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent event) {
+                showReviewDialog(name, id, course, year, status);
+            }
+        });
         col4.add(action);
         gbc.gridx = 3; gbc.weightx = 0.1; content.add(col4, gbc);
 
@@ -519,6 +587,37 @@ public class AdminDashboardFrame {
         outer.setOpaque(false);
         outer.add(panel);
         return outer;
+    }
+
+    private void showReviewDialog(String name, String id, String course, String year, String status) {
+        String details = "<html><b>Student:</b> " + name
+                + "<br><b>Student ID:</b> " + id
+                + "<br><b>Program:</b> " + course
+                + "<br><b>Year Level:</b> " + year
+                + "<br><b>Validation Status:</b> " + status + "</html>";
+        JOptionPane.showMessageDialog(window, details, "Review Student Load", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showEditProfileDialog() {
+        JTextField nameField = new JTextField(adminName);
+        JTextField roleField = new JTextField(adminRole);
+        JPanel form = new JPanel(new GridLayout(2, 2, 8, 8));
+        form.add(new JLabel("Name:"));
+        form.add(nameField);
+        form.add(new JLabel("Role:"));
+        form.add(roleField);
+        int result = JOptionPane.showConfirmDialog(window, form, "Edit Admin Profile",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result == JOptionPane.OK_OPTION
+                && !nameField.getText().trim().isEmpty()
+                && !roleField.getText().trim().isEmpty()) {
+            adminName = nameField.getText().trim();
+            adminRole = roleField.getText().trim();
+            adminHeaderName.setText(adminName);
+            adminHeaderRole.setText(adminRole + " - 99-001");
+            JOptionPane.showMessageDialog(window, "Admin profile changes saved for this session.",
+                    "Profile Updated", JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     private JPanel createAnnouncement(String text, String date) {
@@ -605,7 +704,7 @@ public class AdminDashboardFrame {
         gbc.gridheight = 1; gbc.weightx = 0.4; gbc.insets = new Insets(6, 0, 6, 0);
 
         addInfoRow(panel, "Admin ID", "99-001", 0, gbc);
-        addInfoRow(panel, "Role", "Chief Registrar", 1, gbc);
+        addInfoRow(panel, "Role", adminRole, 1, gbc);
         addInfoRow(panel, "Term", "1st Sem, 2025", 2, gbc);
 
         return panel;

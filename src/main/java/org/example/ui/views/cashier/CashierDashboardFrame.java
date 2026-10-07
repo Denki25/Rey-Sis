@@ -16,6 +16,12 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
+import javax.swing.JTable;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -31,10 +37,13 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class CashierDashboardFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -48,6 +57,14 @@ public class CashierDashboardFrame {
     private final JFrame window = new JFrame("REY SIS | Cashier Dashboard");
     private final Cashier cashier;
     private final List<PaymentRowData> paymentsData = new ArrayList<>();
+    private DefaultTableModel paymentModel;
+    private JTable paymentTable;
+    private TableRowSorter<DefaultTableModel> paymentSorter;
+    private JComboBox<String> transactionFilter;
+    private JTextField searchField;
+    private JLabel todaysCollectionsValue;
+    private JLabel pendingVerificationsValue;
+    private JLabel totalCollectedValue;
 
     public CashierDashboardFrame(Cashier cashier) {
         this.cashier = cashier;
@@ -203,7 +220,7 @@ public class CashierDashboardFrame {
         searchIcon.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         searchPanel.add(searchIcon, BorderLayout.WEST);
 
-        JTextField searchField = new JTextField("Search student name, ID, or reference number...");
+        searchField = new JTextField("Search student name, ID, or reference number...");
         searchField.setForeground(MUTED);
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 12));
         searchField.setBorder(null);
@@ -223,6 +240,11 @@ public class CashierDashboardFrame {
                     searchField.setForeground(MUTED);
                 }
             }
+        });
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent event) { applyPaymentFilters(); }
+            public void removeUpdate(DocumentEvent event) { applyPaymentFilters(); }
+            public void changedUpdate(DocumentEvent event) { applyPaymentFilters(); }
         });
         searchPanel.add(searchField, BorderLayout.CENTER);
 
@@ -272,7 +294,6 @@ public class CashierDashboardFrame {
         userBadge.add(chevron);
         rightControls.add(userBadge);
 
-        header.add(rightControls, BorderLayout.EAST);
         return header;
     }
 
@@ -313,10 +334,10 @@ public class CashierDashboardFrame {
 
         JPanel summaryCardsContainer = new JPanel(new GridLayout(1, 4, 16, 0));
         summaryCardsContainer.setOpaque(false);
-        summaryCardsContainer.add(createSummaryBlock("₱ 142,500.00", "Today's Collections", new Color(235, 242, 233)));
-        summaryCardsContainer.add(createSummaryBlock("18", "Pending Verifications", new Color(248, 237, 219)));
+        summaryCardsContainer.add(createSummaryBlock(formatAmount(calculateTodaysCollections()), "Today's Collections", new Color(235, 242, 233)));
+        summaryCardsContainer.add(createSummaryBlock(String.valueOf(countPendingPayments()), "Pending Verifications", new Color(248, 237, 219)));
         summaryCardsContainer.add(createSummaryButtonBlock("Verify Payment", "Action Required", new Color(235, 242, 233)));
-        summaryCardsContainer.add(createSummaryBlock("₱ 1,840,200", "Total Collected (Month)", new Color(248, 237, 219)));
+        summaryCardsContainer.add(createSummaryBlock(formatAmount(calculateMonthCollected()), "Total Collected (Month)", new Color(248, 237, 219)));
 
         contentWrapper.add(summaryCardsContainer, BorderLayout.NORTH);
 
@@ -324,7 +345,7 @@ public class CashierDashboardFrame {
         tablesAndSummary.setLayout(new BoxLayout(tablesAndSummary, BoxLayout.Y_AXIS));
         tablesAndSummary.setOpaque(false);
         tablesAndSummary.add(Box.createVerticalStrut(10));
-        tablesAndSummary.add(createPaymentsTableCard());
+        tablesAndSummary.add(createDynamicPaymentsTableCard());
 
         contentWrapper.add(tablesAndSummary, BorderLayout.CENTER);
 
@@ -356,6 +377,14 @@ public class CashierDashboardFrame {
         valLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
         valLabel.setForeground(TEXT);
         valLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        if ("Today's Collections".equals(label)) {
+            todaysCollectionsValue = valLabel;
+        } else if ("Pending Verifications".equals(label)) {
+            pendingVerificationsValue = valLabel;
+        } else if ("Total Collected (Month)".equals(label)) {
+            totalCollectedValue = valLabel;
+        }
 
         JLabel subLabel = new JLabel(label);
         subLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
@@ -394,7 +423,7 @@ public class CashierDashboardFrame {
         actionBtn.setFocusPainted(false);
         actionBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         actionBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        actionBtn.addActionListener(e -> JOptionPane.showMessageDialog(window, "Opening payment verification queue.", "REY SIS", JOptionPane.INFORMATION_MESSAGE));
+        actionBtn.addActionListener(e -> verifySelectedPayment());
 
         JLabel subLabel = new JLabel(label);
         subLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
@@ -406,6 +435,235 @@ public class CashierDashboardFrame {
         block.add(subLabel);
 
         return block;
+    }
+
+    private JPanel createDynamicPaymentsTableCard() {
+        CardPanel card = new CardPanel(Color.WHITE);
+        card.setLayout(new BorderLayout(0, 14));
+        card.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+        JPanel titleGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        titleGroup.setOpaque(false);
+        titleGroup.add(new JLabel(new VectorIcon(VectorIcon.Type.BAR_CHART, DEEP_GREEN)));
+        JLabel title = new JLabel("Recent Student Transactions");
+        title.setFont(new Font("SansSerif", Font.BOLD, 18));
+        title.setForeground(DEEP_GREEN);
+        titleGroup.add(title);
+        header.add(titleGroup, BorderLayout.WEST);
+
+        transactionFilter = new JComboBox<>(new String[]{"All Transactions", "Verified", "Pending"});
+        transactionFilter.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        transactionFilter.setForeground(TEXT);
+        transactionFilter.setBackground(Color.WHITE);
+        transactionFilter.setFocusable(false);
+        transactionFilter.addActionListener(event -> applyPaymentFilters());
+        header.add(transactionFilter, BorderLayout.EAST);
+        card.add(header, BorderLayout.NORTH);
+
+        paymentModel = new DefaultTableModel(new Object[]{"REF NO.", "STUDENT NAME", "PROGRAM / ID", "AMOUNT", "FEE TYPE", "STATUS", "TIMESTAMP"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        refreshPaymentModel();
+
+        paymentTable = new JTable(paymentModel);
+        paymentTable.setRowSorter(new TableRowSorter<>(paymentModel));
+        paymentSorter = (TableRowSorter<DefaultTableModel>) paymentTable.getRowSorter();
+        paymentTable.setRowHeight(42);
+        paymentTable.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        paymentTable.setForeground(TEXT);
+        paymentTable.setGridColor(new Color(242, 243, 240));
+        paymentTable.setShowVerticalLines(false);
+        paymentTable.setFillsViewportHeight(true);
+        paymentTable.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 10));
+        paymentTable.getTableHeader().setForeground(MUTED);
+        paymentTable.getTableHeader().setBackground(new Color(248, 249, 247));
+        paymentTable.getTableHeader().setPreferredSize(new Dimension(0, 34));
+
+        int[] widths = {85, 150, 135, 115, 125, 90, 135};
+        for (int index = 0; index < widths.length; index++) {
+            paymentTable.getColumnModel().getColumn(index).setPreferredWidth(widths[index]);
+        }
+        DefaultTableCellRenderer statusRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
+                                                            boolean focused, int row, int column) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, selected, focused, row, column);
+                label.setHorizontalAlignment(SwingConstants.CENTER);
+                label.setFont(new Font("SansSerif", Font.BOLD, 11));
+                label.setForeground("Verified".equals(value) ? new Color(34, 139, 34) :
+                        "Pending".equals(value) ? new Color(218, 145, 33) : new Color(190, 65, 65));
+                return label;
+            }
+        };
+        paymentTable.getColumnModel().getColumn(5).setCellRenderer(statusRenderer);
+        paymentTable.getColumnModel().getColumn(3).setCellRenderer(centeredRenderer());
+        paymentTable.getColumnModel().getColumn(6).setCellRenderer(centeredRenderer());
+        paymentTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2 && paymentTable.getSelectedRow() >= 0) {
+                    int modelRow = paymentTable.convertRowIndexToModel(paymentTable.getSelectedRow());
+                    PaymentRowData payment = paymentsData.get(modelRow);
+                    if ("Pending".equals(payment.status)) {
+                        showPaymentVerificationDialog(payment);
+                    }
+                }
+            }
+        });
+
+        card.add(new JScrollPane(paymentTable), BorderLayout.CENTER);
+        applyPaymentFilters();
+        return card;
+    }
+
+    private DefaultTableCellRenderer centeredRenderer() {
+        DefaultTableCellRenderer renderer = new DefaultTableCellRenderer();
+        renderer.setHorizontalAlignment(SwingConstants.CENTER);
+        return renderer;
+    }
+
+    private void refreshPaymentModel() {
+        if (paymentModel == null) return;
+        paymentModel.setRowCount(0);
+        for (PaymentRowData payment : paymentsData) {
+            paymentModel.addRow(new Object[]{payment.refNo, payment.studentName, payment.programId,
+                    formatAmount(parseAmount(payment.amount)), payment.feeType, payment.status, payment.timestamp});
+        }
+    }
+
+    private void applyPaymentFilters() {
+        if (paymentSorter == null) return;
+        String query = searchField == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
+        if (query.equals("search student name, id, or reference number...")) query = "";
+        String status = transactionFilter == null ? "All Transactions" : String.valueOf(transactionFilter.getSelectedItem());
+        String search = query;
+        paymentSorter.setRowFilter(new javax.swing.RowFilter<DefaultTableModel, Integer>() {
+            @Override
+            public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                String ref = String.valueOf(entry.getValue(0)).toLowerCase(Locale.ROOT);
+                String name = String.valueOf(entry.getValue(1)).toLowerCase(Locale.ROOT);
+                String programId = String.valueOf(entry.getValue(2)).toLowerCase(Locale.ROOT);
+                String rowStatus = String.valueOf(entry.getValue(5));
+                boolean matchesSearch = search.isEmpty() || ref.contains(search) || name.contains(search) || programId.contains(search);
+                boolean matchesStatus = "All Transactions".equals(status) || status.equals(rowStatus);
+                return matchesSearch && matchesStatus;
+            }
+        });
+    }
+
+    private void verifySelectedPayment() {
+        PaymentRowData payment = null;
+        if (paymentTable != null && paymentTable.getSelectedRow() >= 0) {
+            int modelRow = paymentTable.convertRowIndexToModel(paymentTable.getSelectedRow());
+            payment = paymentsData.get(modelRow);
+        }
+        if (payment == null || !"Pending".equals(payment.status)) {
+            for (PaymentRowData candidate : paymentsData) {
+                if ("Pending".equals(candidate.status)) {
+                    payment = candidate;
+                    break;
+                }
+            }
+        }
+        if (payment == null) {
+            JOptionPane.showMessageDialog(window, "There are no pending payments to verify.", "No Pending Payments", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        showPaymentVerificationDialog(payment);
+    }
+
+    private void showPaymentVerificationDialog(PaymentRowData payment) {
+        javax.swing.JDialog dialog = new javax.swing.JDialog(window, "Verify Payment", true);
+        dialog.setDefaultCloseOperation(javax.swing.JDialog.DISPOSE_ON_CLOSE);
+        JPanel content = new JPanel(new BorderLayout(0, 16));
+        content.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+        JLabel heading = new JLabel("Payment Verification");
+        heading.setFont(new Font("SansSerif", Font.BOLD, 18));
+        heading.setForeground(DEEP_GREEN);
+        content.add(heading, BorderLayout.NORTH);
+
+        JPanel details = new JPanel(new GridLayout(0, 2, 10, 10));
+        details.add(new JLabel("Reference No.")); details.add(new JLabel(payment.refNo));
+        details.add(new JLabel("Student")); details.add(new JLabel(payment.studentName));
+        details.add(new JLabel("Program / ID")); details.add(new JLabel(payment.programId));
+        details.add(new JLabel("Amount")); details.add(new JLabel(formatAmount(parseAmount(payment.amount))));
+        details.add(new JLabel("Fee Type")); details.add(new JLabel(payment.feeType));
+        details.add(new JLabel("Timestamp")); details.add(new JLabel(payment.timestamp));
+        content.add(details, BorderLayout.CENTER);
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JButton reject = new JButton("Reject");
+        JButton approve = new JButton("Approve / Verify");
+        approve.setBackground(DEEP_GREEN);
+        approve.setForeground(Color.WHITE);
+        approve.setFocusPainted(false);
+        reject.addActionListener(event -> {
+            payment.status = "Rejected";
+            refreshPaymentModel();
+            updatePaymentMetrics();
+            applyPaymentFilters();
+            dialog.dispose();
+            JOptionPane.showMessageDialog(window, "Payment " + payment.refNo + " was rejected.", "Payment Rejected", JOptionPane.WARNING_MESSAGE);
+        });
+        approve.addActionListener(event -> {
+            payment.status = "Verified";
+            refreshPaymentModel();
+            updatePaymentMetrics();
+            applyPaymentFilters();
+            dialog.dispose();
+            JOptionPane.showMessageDialog(window,
+                    "Payment verified successfully.\nReceipt ready to print: " + payment.refNo,
+                    "Payment Verified", JOptionPane.INFORMATION_MESSAGE);
+        });
+        actions.add(reject);
+        actions.add(approve);
+        content.add(actions, BorderLayout.SOUTH);
+        dialog.setContentPane(content);
+        dialog.setSize(460, 340);
+        dialog.setLocationRelativeTo(window);
+        dialog.setVisible(true);
+    }
+
+    private void updatePaymentMetrics() {
+        if (todaysCollectionsValue != null) todaysCollectionsValue.setText(formatAmount(calculateTodaysCollections()));
+        if (pendingVerificationsValue != null) pendingVerificationsValue.setText(String.valueOf(countPendingPayments()));
+        if (totalCollectedValue != null) totalCollectedValue.setText(formatAmount(calculateMonthCollected()));
+    }
+
+    private double calculateTodaysCollections() {
+        double total = 0;
+        for (PaymentRowData payment : paymentsData) {
+            if ("Verified".equals(payment.status) && payment.timestamp.toLowerCase(Locale.ROOT).contains("today")) total += parseAmount(payment.amount);
+        }
+        return total;
+    }
+
+    private double calculateMonthCollected() {
+        double total = 0;
+        for (PaymentRowData payment : paymentsData) {
+            if ("Verified".equals(payment.status)) total += parseAmount(payment.amount);
+        }
+        return total;
+    }
+
+    private int countPendingPayments() {
+        int count = 0;
+        for (PaymentRowData payment : paymentsData) if ("Pending".equals(payment.status)) count++;
+        return count;
+    }
+
+    private double parseAmount(String amount) {
+        String numeric = amount.replaceAll("[^0-9.,]", "").replace(",", "");
+        return numeric.isEmpty() ? 0 : Double.parseDouble(numeric);
+    }
+
+    private String formatAmount(double amount) {
+        return String.format(Locale.US, "₱ %,.2f", amount);
     }
 
     private JPanel createPaymentsTableCard() {

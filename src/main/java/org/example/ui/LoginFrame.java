@@ -459,7 +459,7 @@ public class LoginFrame {
                     }
                 }
             } catch (Exception ignored) {
-                return null;
+                // Try the remaining classpath resource paths.
             }
         }
         return null;

@@ -5,9 +5,20 @@ import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 public class CashierReportsFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -20,6 +31,10 @@ public class CashierReportsFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Reports");
     private final Cashier cashier;
+    private final List<ReportData> reports = new ArrayList<>();
+    private DefaultTableModel reportModel;
+    private TableRowSorter<DefaultTableModel> reportSorter;
+    private JTextField searchField;
 
     public CashierReportsFrame() {
         this(null);
@@ -27,12 +42,20 @@ public class CashierReportsFrame {
 
     public CashierReportsFrame(Cashier cashier) {
         this.cashier = cashier;
+        initReports();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
         window.setSize(1360, 920);
         window.setLocationRelativeTo(null);
         window.setContentPane(createContent());
+    }
+
+    private void initReports() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy, h:mm a", Locale.US);
+        reports.add(new ReportData("Daily Collection - Oct 05", "PDF", LocalDateTime.now().minusHours(2).format(formatter)));
+        reports.add(new ReportData("Monthly Revenue - September", "CSV", LocalDateTime.now().minusDays(5).format(formatter)));
+        reports.add(new ReportData("Reconciliation Audit - Week 3", "PDF", LocalDateTime.now().minusDays(8).format(formatter)));
     }
 
     public void showWindow() {
@@ -164,12 +187,17 @@ public class CashierReportsFrame {
         searchIcon.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         searchPanel.add(searchIcon, BorderLayout.WEST);
 
-        JTextField searchField = new JTextField("Search reports or keywords...");
+        searchField = new JTextField("Search reports or keywords...");
         searchField.setForeground(MUTED);
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 12));
         searchField.setBorder(null);
         searchField.setOpaque(false);
         searchField.setPreferredSize(new Dimension(350, 24));
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent event) { applyReportFilter(); }
+            public void removeUpdate(DocumentEvent event) { applyReportFilter(); }
+            public void changedUpdate(DocumentEvent event) { applyReportFilter(); }
+        });
 
         searchField.addFocusListener(new java.awt.event.FocusAdapter() {
             public void focusGained(java.awt.event.FocusEvent evt) {
@@ -218,7 +246,6 @@ public class CashierReportsFrame {
         chevron.setForeground(MUTED);
         userBadge.add(chevron);
 
-        header.add(rightControls, BorderLayout.EAST);
         rightControls.add(userBadge);
 
         return header;
@@ -300,7 +327,7 @@ public class CashierReportsFrame {
         actionBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         actionBtn.setMaximumSize(new Dimension(160, 36));
         actionBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        actionBtn.addActionListener(e -> JOptionPane.showMessageDialog(window, title + " report generated successfully.", "REY SIS", JOptionPane.INFORMATION_MESSAGE));
+        actionBtn.addActionListener(e -> generateReport(title, btnText));
 
         card.add(titleLbl);
         card.add(Box.createVerticalStrut(4));
@@ -312,6 +339,143 @@ public class CashierReportsFrame {
     }
 
     private JPanel createRecentReportsTable() {
+        CardPanel card = new CardPanel(Color.WHITE);
+        card.setLayout(new BorderLayout(0, 14));
+        card.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+        JLabel title = new JLabel("Recently Generated Reports");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(DEEP_GREEN);
+        card.add(title, BorderLayout.NORTH);
+
+        reportModel = new DefaultTableModel(new Object[]{"REPORT NAME", "FORMAT", "DATE GENERATED", "ACTION"}, 0) {
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        refreshReportModel();
+        JTable table = new JTable(reportModel);
+        reportSorter = new TableRowSorter<>(reportModel);
+        table.setRowSorter(reportSorter);
+        table.setRowHeight(42);
+        table.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        table.setGridColor(new Color(242, 243, 240));
+        table.setShowVerticalLines(false);
+        table.getTableHeader().setPreferredSize(new Dimension(0, 34));
+        table.getColumnModel().getColumn(3).setPreferredWidth(100);
+        table.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent event) {
+                int row = table.rowAtPoint(event.getPoint());
+                int column = table.columnAtPoint(event.getPoint());
+                if (row >= 0 && column == 3) {
+                    int modelRow = table.convertRowIndexToModel(row);
+                    downloadReport(reports.get(modelRow));
+                }
+            }
+        });
+        card.add(new JScrollPane(table), BorderLayout.CENTER);
+        return card;
+    }
+
+    private void refreshReportModel() {
+        if (reportModel == null) return;
+        reportModel.setRowCount(0);
+        for (ReportData report : reports) reportModel.addRow(new Object[]{report.name, report.format, report.generatedAt, "Download"});
+    }
+
+    private void applyReportFilter() {
+        if (reportSorter == null) return;
+        String query = searchField.getText().trim().toLowerCase(Locale.ROOT);
+        if (query.equals("search reports or keywords...")) query = "";
+        String search = query;
+        reportSorter.setRowFilter(new RowFilter<DefaultTableModel, Integer>() {
+            public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                return search.isEmpty()
+                        || String.valueOf(entry.getValue(0)).toLowerCase(Locale.ROOT).contains(search)
+                        || String.valueOf(entry.getValue(1)).toLowerCase(Locale.ROOT).contains(search);
+            }
+        });
+    }
+
+    private void generateReport(String title, String actionText) {
+        String format = actionText.contains("CSV") ? "CSV" : "PDF";
+        String reportTitle = title + " - " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.US));
+        reports.add(0, new ReportData(reportTitle, format, currentTimestamp()));
+        refreshReportModel();
+        applyReportFilter();
+        if ("CSV".equals(format)) {
+            exportMonthlyRevenue();
+        } else {
+            showGeneratedReport(title);
+        }
+    }
+
+    private void showGeneratedReport(String title) {
+        JTextArea report = new JTextArea(buildReportText(title));
+        report.setEditable(false);
+        report.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        JButton print = new JButton("Print Report");
+        print.addActionListener(event -> {
+            try { report.print(); }
+            catch (Exception exception) { JOptionPane.showMessageDialog(window, exception.getMessage(), "Print Error", JOptionPane.ERROR_MESSAGE); }
+        });
+        JPanel panel = new JPanel(new BorderLayout(0, 10));
+        panel.add(new JScrollPane(report), BorderLayout.CENTER);
+        panel.add(print, BorderLayout.SOUTH);
+        JOptionPane.showMessageDialog(window, panel, title, JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private String buildReportText(String title) {
+        if (title.startsWith("Daily Collection")) {
+            return "REY SIS UNIVERSITY\nDAILY COLLECTION REPORT\n\n"
+                    + "Date: " + currentTimestamp() + "\n\n"
+                    + "Cash:       ₱ 8,000.00\nGCash:      ₱ 12,500.00\nCard:       ₱ 21,750.00\nBank:       ₱ 15,200.00\n"
+                    + "Total:      ₱ 57,450.00\n";
+        }
+        return "REY SIS UNIVERSITY\nRECONCILIATION LOG\n\nGenerated: " + currentTimestamp()
+                + "\nCash Drawer: Balanced\nDigital: Balanced\nBank / Card: Review variance\n";
+    }
+
+    private void exportMonthlyRevenue() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File("rey-sis-monthly-revenue.csv"));
+        if (chooser.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return;
+        try (PrintWriter writer = new PrintWriter(chooser.getSelectedFile(), StandardCharsets.UTF_8)) {
+            writer.println("DATE,REFERENCE,STUDENT,PROGRAM OR ID,METHOD,AMOUNT,STATUS");
+            writer.println("Oct 05, 2026,OR-261005-126,Angela D. Cruz,2024-0187,GCash,12500,Paid");
+            writer.println("Oct 05, 2026,OR-261005-125,Marco Villanueva,2025-0042,Cash,8000,Paid");
+            JOptionPane.showMessageDialog(window, "Monthly revenue CSV exported successfully.", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception exception) {
+            JOptionPane.showMessageDialog(window, "Unable to export report: " + exception.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void downloadReport(ReportData report) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File(report.name.replaceAll("[^a-zA-Z0-9.-]", "_") + "." + report.format.toLowerCase(Locale.ROOT)));
+        if (chooser.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return;
+        try (PrintWriter writer = new PrintWriter(chooser.getSelectedFile(), StandardCharsets.UTF_8)) {
+            writer.print(buildReportText(report.name));
+            JOptionPane.showMessageDialog(window, "Report downloaded successfully.", "Download Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception exception) {
+            JOptionPane.showMessageDialog(window, "Unable to save report: " + exception.getMessage(), "Download Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private String currentTimestamp() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy, h:mm a", Locale.US));
+    }
+
+    private static class ReportData {
+        final String name;
+        final String format;
+        final String generatedAt;
+
+        ReportData(String name, String format, String generatedAt) {
+            this.name = name;
+            this.format = format;
+            this.generatedAt = generatedAt;
+        }
+    }
+
+    private JPanel createLegacyRecentReportsTable() {
         CardPanel card = new CardPanel(Color.WHITE);
         card.setLayout(new BorderLayout(0, 14));
         card.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
