@@ -1,5 +1,7 @@
 package org.example.ui.views.admin;
 
+import org.example.data.AdminEnrollmentRepository;
+import org.example.service.AdminEnrollmentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -9,6 +11,7 @@ import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,6 +39,7 @@ public class AdminValidationFrame {
     private static final Color INACTIVE_CARD_BORDER = new Color(230, 235, 240);
 
     private final JFrame window = new JFrame("REY SIS | Enrollment Validation");
+    private final AdminEnrollmentService enrollmentService = new AdminEnrollmentService();
     private final List<PendingStudent> pendingStudents = new ArrayList<>();
     private JPanel pendingListPanel;
     private JPanel inspectionContent;
@@ -43,10 +47,9 @@ public class AdminValidationFrame {
     private JLabel conflictValue;
     private JLabel clearedTodayValue;
     private PendingStudent selectedStudent;
-    private int clearedToday;
 
     public AdminValidationFrame() {
-        initializePendingStudents();
+        loadEnrollments();
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1280, 800));
         window.setSize(1360, 900);
@@ -54,18 +57,23 @@ public class AdminValidationFrame {
         window.setContentPane(createContent());
     }
 
-    private void initializePendingStudents() {
-        pendingStudents.add(new PendingStudent("Prince Cariaga", "2025-0013", "BS Information Tech", "3rd Year", 18,
-                List.of(new CourseRequest("COMSCI 2110 - OOP", "TTh 09:00 - 11:00 AM", 3, true),
-                        new CourseRequest("COMSCI 3110 - Algorithms", "MWF 01:00 - 02:00 PM", 3, false),
-                        new CourseRequest("MATH 1013 - Discrete Math", "TTh 11:30 - 01:00 PM", 3, true))));
-        pendingStudents.add(new PendingStudent("Anna Delos Reyes", "2024-0089", "BS Psychology", "4th Year", 21,
-                List.of(new CourseRequest("PSYCH 4100 - Clinical Psychology", "MWF 08:00 - 09:00 AM", 3, true),
-                        new CourseRequest("PSYCH 4200 - Assessment", "TTh 10:00 - 11:30 AM", 3, true))));
-        pendingStudents.add(new PendingStudent("Mark Mendoza", "2025-0012", "BS Civil Engineering", "2nd Year", 15,
-                List.of(new CourseRequest("CIVIL 2100 - Surveying", "MWF 09:00 - 10:00 AM", 3, true),
-                        new CourseRequest("MATH 2100 - Engineering Math", "TTh 01:00 - 02:30 PM", 3, true))));
-        selectedStudent = pendingStudents.get(0);
+    private void loadEnrollments() {
+        pendingStudents.clear();
+        try {
+            for (AdminEnrollmentRepository.EnrollmentSummary enrollment : enrollmentService.findEnrollments()) {
+                String name = enrollment.courseCode() + " - " + enrollment.courseName();
+                String term = enrollment.semester() + " | " + enrollment.academicYear();
+                CourseRequest course = new CourseRequest(name, term, enrollment.units(), true);
+                pendingStudents.add(new PendingStudent(enrollment.enrollmentId(), enrollment.studentName(),
+                        enrollment.studentId(), enrollment.program(), enrollment.yearLevel(), enrollment.status(),
+                        List.of(course)));
+            }
+            selectedStudent = pendingStudents.isEmpty() ? null : pendingStudents.get(0);
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(null, "Unable to load enrollment records from the database.",
+                    "Enrollment Records", JOptionPane.ERROR_MESSAGE);
+            selectedStudent = null;
+        }
     }
 
     public void showWindow() {
@@ -195,7 +203,7 @@ public class AdminValidationFrame {
 
         // Title
         gbc.insets = new Insets(0, 0, 25, 0);
-        JLabel pageTitle = new JLabel("Enrollment Validation Queue");
+        JLabel pageTitle = new JLabel("Enrollment Records");
         pageTitle.setFont(new Font("SansSerif", Font.BOLD, 22));
         pageTitle.setForeground(SIDEBAR_BG);
         body.add(pageTitle, gbc);
@@ -239,9 +247,9 @@ public class AdminValidationFrame {
         stats.setOpaque(false);
         stats.setPreferredSize(new Dimension(0, 100));
 
-        stats.add(createStatCard("Pending Reviews", String.valueOf(pendingStudents.size()), ORANGE_TEXT));
-        stats.add(createStatCard("Detected Conflicts", String.valueOf(countConflicts()), RED_TEXT));
-        stats.add(createStatCard("Cleared Today", String.valueOf(clearedToday), GREEN_TEXT));
+        stats.add(createStatCard("Enrollment Records", String.valueOf(pendingStudents.size()), ORANGE_TEXT));
+        stats.add(createStatCard("Enrolled Records", String.valueOf(countEnrolled()), GREEN_TEXT));
+        stats.add(createStatCard("Validation Decisions", "Not tracked", RED_TEXT));
 
         return stats;
     }
@@ -264,9 +272,9 @@ public class AdminValidationFrame {
         valLabel.setForeground(valueColor);
         valLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        if (title.equals("Pending Reviews")) pendingReviewsValue = valLabel;
-        if (title.equals("Detected Conflicts")) conflictValue = valLabel;
-        if (title.equals("Cleared Today")) clearedTodayValue = valLabel;
+        if (title.equals("Enrollment Records")) pendingReviewsValue = valLabel;
+        if (title.equals("Enrolled Records")) conflictValue = valLabel;
+        if (title.equals("Validation Decisions")) clearedTodayValue = valLabel;
 
         card.add(titleLabel);
         card.add(Box.createVerticalStrut(8));
@@ -275,28 +283,36 @@ public class AdminValidationFrame {
         return card;
     }
 
-    private int countConflicts() {
-        int conflicts = 0;
-        for (PendingStudent student : pendingStudents) {
-            if (student.hasConflict()) conflicts++;
-        }
-        return conflicts;
+    private int countEnrolled() {
+        return (int) pendingStudents.stream()
+                .filter(enrollment -> "ENROLLED".equalsIgnoreCase(enrollment.status))
+                .count();
     }
 
     private void updateStats() {
         if (pendingReviewsValue != null) pendingReviewsValue.setText(String.valueOf(pendingStudents.size()));
-        if (conflictValue != null) conflictValue.setText(String.valueOf(countConflicts()));
-        if (clearedTodayValue != null) clearedTodayValue.setText(String.valueOf(clearedToday));
+        if (conflictValue != null) conflictValue.setText(String.valueOf(countEnrolled()));
+        if (clearedTodayValue != null) clearedTodayValue.setText("Not tracked");
     }
 
     private JPanel createDynamicPendingApprovalList() {
         JPanel container = new JPanel(new BorderLayout());
         container.setOpaque(false);
-        JLabel title = new JLabel("Pending Approval List");
+        JLabel title = new JLabel("Enrollment Records");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(TEXT_DARK);
         title.setBorder(new EmptyBorder(0, 0, 15, 0));
-        container.add(title, BorderLayout.NORTH);
+        JPanel heading = new JPanel(new BorderLayout());
+        heading.setOpaque(false);
+        heading.add(title, BorderLayout.WEST);
+        JButton refresh = new JButton("Refresh");
+        refresh.addActionListener(event -> {
+            loadEnrollments();
+            refreshPendingList();
+            refreshInspectionPanel();
+        });
+        heading.add(refresh, BorderLayout.EAST);
+        container.add(heading, BorderLayout.NORTH);
 
         pendingListPanel = new JPanel();
         pendingListPanel.setLayout(new BoxLayout(pendingListPanel, BoxLayout.Y_AXIS));
@@ -309,6 +325,9 @@ public class AdminValidationFrame {
     private void refreshPendingList() {
         if (pendingListPanel == null) return;
         pendingListPanel.removeAll();
+        if (pendingStudents.isEmpty()) {
+            pendingListPanel.add(new JLabel("No enrollment records found."));
+        }
         for (int index = 0; index < pendingStudents.size(); index++) {
             PendingStudent student = pendingStudents.get(index);
             pendingListPanel.add(createDynamicStudentCard(student, student == selectedStudent));
@@ -322,10 +341,11 @@ public class AdminValidationFrame {
 
     private JPanel createDynamicStudentCard(PendingStudent student, boolean active) {
         JPanel card = createStudentCard(student.name,
-                "ID: " + student.id + "  |  " + student.program + " (" + student.year + ")",
-                student.hasConflict() ? "Missing Pre-requisite: COMSCI 3110 requires COMSCI 2100" : "All Pre-requisites Clear",
-                student.hasConflict() ? 0 : 2, active);
-        JButton inspectButton = findButton(card, "Inspect Load");
+                "ID: " + student.id + "  |  " + student.program + " (" + student.year + ")"
+                        + "  |  Enrollment #" + student.enrollmentId,
+                "Status: " + (student.status == null ? "Not specified" : student.status),
+                "ENROLLED".equalsIgnoreCase(student.status) ? 2 : 1, active);
+        JButton inspectButton = findButton(card, "Inspect Enrollment");
         if (inspectButton != null) {
             inspectButton.addActionListener(event -> {
                 selectedStudent = student;
@@ -350,8 +370,7 @@ public class AdminValidationFrame {
     private JPanel createPendingApprovalList() {
         JPanel container = new JPanel(new BorderLayout());
         container.setOpaque(false);
-
-        JLabel title = new JLabel("Pending Approval List");
+        JLabel title = new JLabel("Enrollment Records");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(TEXT_DARK);
         title.setBorder(new EmptyBorder(0, 0, 15, 0));
@@ -360,17 +379,14 @@ public class AdminValidationFrame {
         JPanel list = new JPanel();
         list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
         list.setOpaque(false);
-
-        list.add(createStudentCard("Prince Cariaga", "ID: 2025-0013 • BS Information Tech (3rd Year)",
-                "⚠ Missing Pre-requisite: COMSCI 3110", 0, true));
-        list.add(Box.createVerticalStrut(15));
-        list.add(createStudentCard("Anna Delos Reyes", "ID: 2024-0089 • BS Psychology (4th Year)",
-                "⚠ Units Overload Request (21u)", 1, false));
-        list.add(Box.createVerticalStrut(15));
-        list.add(createStudentCard("Mark Mendoza", "ID: 2025-0012 • BS Civil Engineering (2nd Year)",
-                "✔ All Pre-requisites Clear", 2, false));
-
-        // Push items to top
+        for (int index = 0; index < pendingStudents.size(); index++) {
+            PendingStudent enrollment = pendingStudents.get(index);
+            list.add(createStudentCard(enrollment.name,
+                    "ID: " + enrollment.id + " | Enrollment #" + enrollment.enrollmentId,
+                    "Status: " + (enrollment.status == null ? "Not specified" : enrollment.status),
+                    "ENROLLED".equalsIgnoreCase(enrollment.status) ? 2 : 1, index == 0));
+            list.add(Box.createVerticalStrut(15));
+        }
         list.add(Box.createVerticalGlue());
 
         container.add(list, BorderLayout.CENTER);
@@ -417,7 +433,7 @@ public class AdminValidationFrame {
         actionPanel.setOpaque(false);
         actionPanel.setPreferredSize(new Dimension(140, 0));
 
-        JButton inspectBtn = new JButton("Inspect Load");
+        JButton inspectBtn = new JButton("Inspect Enrollment");
         inspectBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
         inspectBtn.setForeground(isActive ? Color.WHITE : TEXT_DARK);
         inspectBtn.setBackground(isActive ? SIDEBAR_BG : new Color(240, 244, 248));
@@ -464,7 +480,7 @@ public class AdminValidationFrame {
         RoundedTopPanel header = new RoundedTopPanel(16, SIDEBAR_BG);
         header.setLayout(new BorderLayout());
         header.setBorder(new EmptyBorder(20, 20, 20, 20));
-        JLabel title = new JLabel("Student Load Inspection");
+        JLabel title = new JLabel("Enrollment Record");
         title.setFont(new Font("SansSerif", Font.BOLD, 14));
         title.setForeground(Color.WHITE);
         header.add(title, BorderLayout.CENTER);
@@ -482,7 +498,7 @@ public class AdminValidationFrame {
         if (inspectionContent == null) return;
         inspectionContent.removeAll();
         if (selectedStudent == null) {
-            inspectionContent.add(new JLabel("Select a student to inspect."));
+            inspectionContent.add(new JLabel("No enrollment record is available to inspect."));
             inspectionContent.revalidate();
             inspectionContent.repaint();
             return;
@@ -490,7 +506,8 @@ public class AdminValidationFrame {
         JLabel name = new JLabel(selectedStudent.name);
         name.setFont(new Font("SansSerif", Font.BOLD, 16));
         name.setForeground(TEXT_DARK);
-        JLabel details = new JLabel(selectedStudent.id + " | " + selectedStudent.program + " - " + selectedStudent.year);
+        JLabel details = new JLabel(selectedStudent.id + " | " + selectedStudent.program + " - "
+                + selectedStudent.year + " | Enrollment #" + selectedStudent.enrollmentId);
         details.setFont(new Font("SansSerif", Font.PLAIN, 12));
         details.setForeground(TEXT_MUTED);
         inspectionContent.add(name);
@@ -499,14 +516,14 @@ public class AdminValidationFrame {
         inspectionContent.add(Box.createVerticalStrut(15));
         inspectionContent.add(new JSeparator());
         inspectionContent.add(Box.createVerticalStrut(15));
-        JLabel courses = new JLabel("Requested Courses (" + selectedStudent.totalUnits + " Units)");
+        JLabel courses = new JLabel("Enrolled Course (" + selectedStudent.totalUnits + " Units)");
         courses.setFont(new Font("SansSerif", Font.BOLD, 13));
         courses.setForeground(SIDEBAR_BG);
         inspectionContent.add(courses);
         inspectionContent.add(Box.createVerticalStrut(15));
         for (CourseRequest course : selectedStudent.courses) {
             inspectionContent.add(createCourseCard(course.name, course.schedule + " | " + course.units + " Units",
-                    course.valid, course.valid ? null : "COMSCI 3110 requires COMSCI 2100"));
+                    course.valid, null));
             inspectionContent.add(Box.createVerticalStrut(10));
         }
         RoundedPanel summary = new RoundedPanel(8, new Color(249, 246, 238));
@@ -515,181 +532,21 @@ public class AdminValidationFrame {
         JLabel units = new JLabel("Total Units: " + selectedStudent.totalUnits + ".0");
         units.setFont(new Font("SansSerif", Font.BOLD, 13));
         units.setForeground(TEXT_DARK);
-        JLabel fee = new JLabel(String.format("Assessment: ₱%,.2f", selectedStudent.assessmentFee));
-        fee.setFont(new Font("SansSerif", Font.BOLD, 13));
-        fee.setForeground(TEXT_DARK);
         summary.add(units);
-        summary.add(Box.createVerticalStrut(10));
-        summary.add(fee);
         inspectionContent.add(summary);
-        inspectionContent.add(Box.createVerticalGlue());
-
-        JButton approve = new JButton("Approve Enrollment");
-        approve.setFont(new Font("SansSerif", Font.BOLD, 13));
-        approve.setForeground(Color.WHITE);
-        approve.setBackground(new Color(25, 160, 80));
-        approve.setBorder(new EmptyBorder(12, 0, 12, 0));
-        approve.setFocusPainted(false);
-        approve.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
-        approve.addActionListener(event -> approveSelectedStudent());
-        JButton reject = new JButton("Reject / Request Revision");
-        reject.setFont(new Font("SansSerif", Font.BOLD, 13));
-        reject.setForeground(RED_TEXT);
-        reject.setBackground(Color.WHITE);
-        reject.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(250, 180, 180)),
-                new EmptyBorder(11, 0, 11, 0)));
-        reject.setFocusPainted(false);
-        reject.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
-        reject.addActionListener(event -> rejectSelectedStudent());
-        JPanel actions = new JPanel(new GridLayout(1, 2, 10, 0));
-        actions.setOpaque(false);
-        actions.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
         inspectionContent.add(Box.createVerticalStrut(20));
-        actions.add(approve);
-        actions.add(reject);
-        inspectionContent.add(actions);
+        JLabel status = new JLabel("Enrollment status: "
+                + (selectedStudent.status == null ? "Not specified" : selectedStudent.status));
+        status.setFont(new Font("SansSerif", Font.BOLD, 12));
+        status.setForeground(TEXT_MUTED);
+        inspectionContent.add(status);
+        inspectionContent.add(Box.createVerticalGlue());
         inspectionContent.revalidate();
         inspectionContent.repaint();
     }
 
-    private void approveSelectedStudent() {
-        if (selectedStudent == null) return;
-        if (selectedStudent.hasConflict()) {
-            int override = JOptionPane.showConfirmDialog(window,
-                    "This student has unresolved conflicts. Approve with override?",
-                    "Validation Conflict", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-            if (override != JOptionPane.YES_OPTION) return;
-        }
-        pendingStudents.remove(selectedStudent);
-        clearedToday++;
-        JOptionPane.showMessageDialog(window, "Enrollment approved successfully.", "Approval Complete", JOptionPane.INFORMATION_MESSAGE);
-        selectedStudent = pendingStudents.isEmpty() ? null : pendingStudents.get(0);
-        refreshPendingList();
-        refreshInspectionPanel();
-    }
-
-    private void rejectSelectedStudent() {
-        if (selectedStudent == null) return;
-        String reason = JOptionPane.showInputDialog(window,
-                "Enter a rejection or revision reason:", "Request Revision", JOptionPane.PLAIN_MESSAGE);
-        if (reason == null || reason.trim().isEmpty()) return;
-        pendingStudents.remove(selectedStudent);
-        JOptionPane.showMessageDialog(window, "Student enrollment was marked for revision.\nReason: " + reason.trim(),
-                "Enrollment Rejected", JOptionPane.INFORMATION_MESSAGE);
-        selectedStudent = pendingStudents.isEmpty() ? null : pendingStudents.get(0);
-        refreshPendingList();
-        refreshInspectionPanel();
-    }
-
     private JPanel createInspectionPanel() {
-        RoundedPanel panel = new RoundedPanel(16, Color.WHITE);
-        panel.setLayout(new BorderLayout());
-        panel.setBorder(BorderFactory.createLineBorder(INACTIVE_CARD_BORDER, 1));
-
-        // Header
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(SIDEBAR_BG);
-        header.setBorder(new EmptyBorder(20, 20, 20, 20));
-        JLabel headerLabel = new JLabel("Student Load Inspection");
-        headerLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
-        headerLabel.setForeground(Color.WHITE);
-        header.add(headerLabel, BorderLayout.CENTER);
-
-        // Fix top corners being rounded on the container but not the header
-        RoundedTopPanel roundedHeader = new RoundedTopPanel(16, SIDEBAR_BG);
-        roundedHeader.setLayout(new BorderLayout());
-        roundedHeader.add(header);
-        panel.add(roundedHeader, BorderLayout.NORTH);
-
-        // Content
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setOpaque(false);
-        content.setBorder(new EmptyBorder(25, 25, 25, 25));
-
-        // Student Info
-        JLabel nameLabel = new JLabel("Prince Cariaga");
-        nameLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
-        nameLabel.setForeground(TEXT_DARK);
-
-        JLabel idLabel = new JLabel("2025-0013 | BSIT - 3rd Year");
-        idLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        idLabel.setForeground(TEXT_MUTED);
-
-        content.add(nameLabel);
-        content.add(Box.createVerticalStrut(4));
-        content.add(idLabel);
-        content.add(Box.createVerticalStrut(15));
-
-        JSeparator sep = new JSeparator();
-        sep.setForeground(new Color(240, 240, 240));
-        content.add(sep);
-        content.add(Box.createVerticalStrut(15));
-
-        // Courses Title
-        JLabel coursesTitle = new JLabel("Requested Courses (18 Units)");
-        coursesTitle.setFont(new Font("SansSerif", Font.BOLD, 13));
-        coursesTitle.setForeground(SIDEBAR_BG);
-        content.add(coursesTitle);
-        content.add(Box.createVerticalStrut(15));
-
-        // Course List
-        content.add(createCourseCard("COMSCI 2110 - OOP", "TTh 09:00 - 11:00 AM | 3 Units", true, null));
-        content.add(Box.createVerticalStrut(10));
-        content.add(createCourseCard("COMSCI 3110 - Algorithms", "MWF 01:00 - 02:00 PM | 3 Units", false, "Failed Pre-req: COMSCI 2100"));
-        content.add(Box.createVerticalStrut(10));
-        content.add(createCourseCard("MATH 1013 - Discrete Math", "TTh 11:30 - 01:00 PM | 3 Units", true, null));
-        content.add(Box.createVerticalStrut(20));
-
-        // Summary Box
-        RoundedPanel summaryBox = new RoundedPanel(8, new Color(249, 246, 238)); // Beige tint
-        summaryBox.setLayout(new BoxLayout(summaryBox, BoxLayout.Y_AXIS));
-        summaryBox.setBorder(new EmptyBorder(15, 20, 15, 20));
-
-        JLabel totalUnits = new JLabel("Total Units: 18.0");
-        totalUnits.setFont(new Font("SansSerif", Font.BOLD, 13));
-        totalUnits.setForeground(TEXT_DARK);
-
-        JLabel assessment = new JLabel("Assessment: ₱24,500.00");
-        assessment.setFont(new Font("SansSerif", Font.BOLD, 13));
-        assessment.setForeground(TEXT_DARK);
-
-        summaryBox.add(totalUnits);
-        summaryBox.add(Box.createVerticalStrut(10));
-        summaryBox.add(assessment);
-
-        content.add(summaryBox);
-        content.add(Box.createVerticalGlue());
-
-        // Buttons
-        JButton approveBtn = new JButton("Approve Enrollment");
-        approveBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
-        approveBtn.setForeground(Color.WHITE);
-        approveBtn.setBackground(new Color(25, 160, 80)); // Brighter green for approval
-        approveBtn.setBorder(new EmptyBorder(12, 0, 12, 0));
-        approveBtn.setFocusPainted(false);
-        approveBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        approveBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
-
-        JButton rejectBtn = new JButton("Reject & Send Feedback");
-        rejectBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
-        rejectBtn.setForeground(RED_TEXT);
-        rejectBtn.setBackground(Color.WHITE);
-        rejectBtn.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(250, 180, 180), 1),
-                new EmptyBorder(11, 0, 11, 0)
-        ));
-        rejectBtn.setFocusPainted(false);
-        rejectBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        rejectBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
-
-        content.add(Box.createVerticalStrut(20));
-        content.add(approveBtn);
-        content.add(Box.createVerticalStrut(10));
-        content.add(rejectBtn);
-
-        panel.add(content, BorderLayout.CENTER);
-        return panel;
+        return createDynamicInspectionPanel();
     }
 
     private JPanel createCourseCard(String title, String subtitle, boolean isValid, String error) {
@@ -751,30 +608,25 @@ public class AdminValidationFrame {
     }
 
     private static class PendingStudent {
+        private final int enrollmentId;
         private final String name;
         private final String id;
         private final String program;
         private final String year;
+        private final String status;
         private final int totalUnits;
-        private final double assessmentFee;
         private final List<CourseRequest> courses;
 
-        PendingStudent(String name, String id, String program, String year, int totalUnits,
+        PendingStudent(int enrollmentId, String name, String id, String program, String year, String status,
                        List<CourseRequest> courses) {
+            this.enrollmentId = enrollmentId;
             this.name = name;
             this.id = id;
             this.program = program;
             this.year = year;
-            this.totalUnits = totalUnits;
-            this.assessmentFee = totalUnits * 1361.11;
+            this.status = status;
             this.courses = courses;
-        }
-
-        boolean hasConflict() {
-            for (CourseRequest course : courses) {
-                if (!course.valid) return true;
-            }
-            return false;
+            this.totalUnits = courses.stream().mapToInt(course -> course.units).sum();
         }
     }
 

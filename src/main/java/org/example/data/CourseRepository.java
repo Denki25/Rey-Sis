@@ -6,22 +6,42 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Time;
 import java.util.ArrayList;
 import java.util.List;
 
 public final class CourseRepository {
     public List<Course> findAll() throws SQLException {
-        String sql = "SELECT course_code, course_name, units FROM courses ORDER BY course_code";
+        String sql = "SELECT course_code, course_name, units, department FROM courses ORDER BY course_code";
         List<Course> courses = new ArrayList<>();
         try (Connection connection = DatabaseConnection.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet result = statement.executeQuery()) {
             while (result.next()) {
                 courses.add(new Course(result.getString("course_code"), result.getString("course_name"),
-                        result.getBigDecimal("units").intValue()));
+                        result.getBigDecimal("units").intValue(), result.getString("department")));
             }
         }
         return courses;
+    }
+
+    public List<CourseSchedule> findSchedulesByCourseCode(String courseCode) throws SQLException {
+        String sql = "SELECT s.day_of_week, s.start_time, s.end_time, s.room, s.instructor "
+                + "FROM schedules s JOIN courses c ON c.course_id = s.course_id "
+                + "WHERE c.course_code = ? ORDER BY s.day_of_week, s.start_time";
+        List<CourseSchedule> schedules = new ArrayList<>();
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, courseCode);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    schedules.add(new CourseSchedule(result.getString("day_of_week"),
+                            result.getTime("start_time"), result.getTime("end_time"),
+                            result.getString("room"), result.getString("instructor")));
+                }
+            }
+        }
+        return schedules;
     }
 
     public void create(Course course, String department) throws SQLException {
@@ -58,5 +78,8 @@ public final class CourseRepository {
             }
             statement.executeUpdate();
         }
+    }
+
+    public record CourseSchedule(String dayOfWeek, Time startTime, Time endTime, String room, String instructor) {
     }
 }

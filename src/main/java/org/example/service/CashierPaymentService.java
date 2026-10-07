@@ -4,6 +4,7 @@ import org.example.auth.UserSession;
 import org.example.data.PaymentRepository;
 
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class CashierPaymentService {
@@ -30,6 +31,37 @@ public final class CashierPaymentService {
     public List<PaymentRepository.PaymentRecord> findRecent() throws SQLException {
         requireCashierOrAdmin();
         return paymentRepository.findRecent();
+    }
+
+    public List<PaymentRepository.PaymentRecord> findByStudentId(String studentId) throws SQLException {
+        requireCashierOrAdmin();
+        return paymentRepository.findByStudentId(studentId);
+    }
+
+    public List<PaymentRepository.PaymentRecord> findPaymentsBetween(LocalDate startDate, LocalDate endDateExclusive)
+            throws SQLException {
+        requireCashierOrAdmin();
+        return paymentRepository.findPaymentsBetween(startDate, endDateExclusive);
+    }
+
+    public PaymentRepository.PaymentSummary findSummary() throws SQLException {
+        requireCashierOrAdmin();
+        return paymentRepository.findSummary();
+    }
+
+    public List<PaymentRepository.PaymentMethodTotal> findTodayTotalsByPaymentType() throws SQLException {
+        requireCashierOrAdmin();
+        return paymentRepository.findTodayTotalsByPaymentType();
+    }
+
+    public void voidVerifiedPayment(String referenceNumber) throws SQLException {
+        requireCashierOrAdmin();
+        paymentRepository.voidVerifiedPayment(referenceNumber);
+    }
+
+    public void updatePendingPaymentStatus(String referenceNumber, String newStatus) throws SQLException {
+        requireCashierOrAdmin();
+        paymentRepository.updatePendingPaymentStatus(referenceNumber, newStatus);
     }
 
     private void requireCashierOrAdmin() {

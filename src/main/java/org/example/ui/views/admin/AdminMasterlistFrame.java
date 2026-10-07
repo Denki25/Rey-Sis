@@ -1,5 +1,7 @@
 package org.example.ui.views.admin;
 
+import org.example.data.StudentDirectoryRepository;
+import org.example.service.AdminStudentService;
 import org.example.ui.LoginFrame;
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -14,6 +16,8 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.SQLException;
+import java.util.List;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.TableRowSorter;
@@ -43,6 +47,8 @@ public class AdminMasterlistFrame {
 
     private final JFrame window = new JFrame("REY SIS | Student Masterlist");
     private final String[] tableColumns = {"STUDENT ID", "FULL NAME", "PROGRAM & YEAR", "STATUS", "ACTION"};
+    private final AdminStudentService studentService = new AdminStudentService();
+    private List<StudentDirectoryRepository.StudentSummary> students = List.of();
     private DefaultTableModel studentTableModel;
     private JTable studentTable;
     private TableRowSorter<DefaultTableModel> tableSorter;
@@ -54,6 +60,7 @@ public class AdminMasterlistFrame {
     private JComboBox<String> yearFilter;
 
     public AdminMasterlistFrame() {
+        loadStudents();
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1280, 800));
         window.setSize(1360, 900);
@@ -63,6 +70,52 @@ public class AdminMasterlistFrame {
 
     public void showWindow() {
         window.setVisible(true);
+    }
+
+    private void loadStudents() {
+        try {
+            students = studentService.findStudents();
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load student records from the database.",
+                    "Student Records", JOptionPane.ERROR_MESSAGE);
+            students = List.of();
+        }
+    }
+
+    private void refreshStudents() {
+        loadStudents();
+        if (studentTableModel == null) return;
+        studentTableModel.setRowCount(0);
+        addStudentRows();
+        refreshFilterOptions();
+        updateStats();
+        applyFilters("");
+    }
+
+    private void addStudentRows() {
+        for (StudentDirectoryRepository.StudentSummary student : students) {
+            studentTableModel.addRow(new Object[]{student.id(), student.name(),
+                    student.program() + " - " + student.yearLevel(),
+                    student.enrollmentStatus(), "View Profile"});
+        }
+    }
+
+    private void refreshFilterOptions() {
+        if (programFilter == null || yearFilter == null) return;
+        String selectedProgram = String.valueOf(programFilter.getSelectedItem());
+        String selectedYear = String.valueOf(yearFilter.getSelectedItem());
+        programFilter.removeAllItems();
+        programFilter.addItem("Program: All");
+        students.stream().map(StudentDirectoryRepository.StudentSummary::program)
+                .filter(value -> value != null && !value.isBlank()).distinct().sorted()
+                .forEach(value -> programFilter.addItem("Program: " + value));
+        yearFilter.removeAllItems();
+        yearFilter.addItem("Year Level: All");
+        students.stream().map(StudentDirectoryRepository.StudentSummary::yearLevel)
+                .filter(value -> value != null && !value.isBlank()).distinct().sorted()
+                .forEach(value -> yearFilter.addItem("Year Level: " + value));
+        programFilter.setSelectedItem(selectedProgram);
+        yearFilter.setSelectedItem(selectedYear);
     }
 
     private JPanel createContent() {
@@ -215,9 +268,9 @@ public class AdminMasterlistFrame {
         JPanel stats = new JPanel(new GridLayout(1, 3, 20, 0));
         stats.setOpaque(false);
 
-        stats.add(createStatCard("Total Enrolled Students", "0", IconType.GRADUATION_CAP, STAT_GREEN_BG));
-        stats.add(createStatCard("Active Regular Students", "0", IconType.DOCUMENT_STACK, STAT_YELLOW_BG));
-        stats.add(createStatCard("Pending Registrations", "0", IconType.HOURGLASS, STAT_BLUE_BG));
+        stats.add(createStatCard("Total Students", String.valueOf(students.size()), IconType.GRADUATION_CAP, STAT_GREEN_BG));
+        stats.add(createStatCard("Enrolled Students", "0", IconType.DOCUMENT_STACK, STAT_YELLOW_BG));
+        stats.add(createStatCard("Unenrolled Students", "0", IconType.HOURGLASS, STAT_BLUE_BG));
 
         return stats;
     }
@@ -241,11 +294,11 @@ public class AdminMasterlistFrame {
         valLabel.setFont(new Font("SansSerif", Font.BOLD, 28));
         valLabel.setForeground(TEXT_DARK);
 
-        if (title.equals("Total Enrolled Students")) {
+        if (title.equals("Total Students")) {
             totalEnrolledValue = valLabel;
-        } else if (title.equals("Active Regular Students")) {
+        } else if (title.equals("Enrolled Students")) {
             activeRegularValue = valLabel;
-        } else if (title.equals("Pending Registrations")) {
+        } else if (title.equals("Unenrolled Students")) {
             pendingRegistrationsValue = valLabel;
         }
 
@@ -321,8 +374,9 @@ public class AdminMasterlistFrame {
         left.add(searchBox);
 
         // Dropdowns
-        programFilter = createStyledComboBox(new String[]{"Program: All", "BS Information Tech", "BS Civil Engineering", "BS Accountancy", "BS Psychology", "BS Computer Science"});
-        yearFilter = createStyledComboBox(new String[]{"Year Level: All", "1st Year", "2nd Year", "3rd Year", "4th Year"});
+        programFilter = createStyledComboBox(new String[]{"Program: All"});
+        yearFilter = createStyledComboBox(new String[]{"Year Level: All"});
+        refreshFilterOptions();
         programFilter.addActionListener(event -> applyFilters(searchField.getText()));
         yearFilter.addActionListener(event -> applyFilters(searchField.getText()));
         left.add(programFilter);
@@ -346,17 +400,16 @@ public class AdminMasterlistFrame {
         exportBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         exportBtn.addActionListener(event -> exportVisibleRows());
 
-        JButton addStudentBtn = new JButton("+ Add Student");
-        addStudentBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
-        addStudentBtn.setForeground(Color.WHITE);
-        addStudentBtn.setBackground(SIDEBAR_BG);
-        addStudentBtn.setBorder(new EmptyBorder(11, 22, 11, 22));
-        addStudentBtn.setFocusPainted(false);
-        addStudentBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        addStudentBtn.addActionListener(event -> showStudentDialog(-1, true));
-
         right.add(exportBtn);
-        right.add(addStudentBtn);
+        JButton refreshBtn = new JButton("Refresh");
+        refreshBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        refreshBtn.setForeground(Color.WHITE);
+        refreshBtn.setBackground(SIDEBAR_BG);
+        refreshBtn.setBorder(new EmptyBorder(11, 22, 11, 22));
+        refreshBtn.setFocusPainted(false);
+        refreshBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        refreshBtn.addActionListener(event -> refreshStudents());
+        right.add(refreshBtn);
 
         toolbar.add(right, BorderLayout.EAST);
         return toolbar;
@@ -377,18 +430,11 @@ public class AdminMasterlistFrame {
         container.setLayout(new BorderLayout());
         container.setBorder(BorderFactory.createLineBorder(new Color(230, 235, 240), 1));
 
-        Object[][] data = {
-                {"2025-0011", "Justine Rivera", "BS Information Tech - 3rd Year", "Enrolled", "View Profile | Edit"},
-                {"2025-0012", "Mark Mendoza", "BS Civil Engineering - 2nd Year", "Unenrolled", "View Profile | Edit"},
-                {"2026-0145", "Sophia Lauren", "BS Accountancy - 1st Year", "Pending", "View Profile | Edit"},
-                {"2025-0013", "Prince Cariaga", "BS Information Tech - 3rd Year", "Conflict", "View Profile | Edit"},
-                {"2024-0089", "Anna Delos Reyes", "BS Psychology - 4th Year", "Enrolled", "View Profile | Edit"},
-                {"2025-0210", "Kevin Tan", "BS Computer Science - 2nd Year", "Enrolled", "View Profile | Edit"}
-        };
-        studentTableModel = new DefaultTableModel(data, tableColumns) {
+        studentTableModel = new DefaultTableModel(tableColumns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
+        addStudentRows();
         studentTable = new JTable(studentTableModel);
         tableSorter = new TableRowSorter<>(studentTableModel);
         studentTable.setRowSorter(tableSorter);
@@ -429,9 +475,7 @@ public class AdminMasterlistFrame {
                 int column = studentTable.columnAtPoint(event.getPoint());
                 if (row >= 0 && column == 4) {
                     int modelRow = studentTable.convertRowIndexToModel(row);
-                    int midpoint = studentTable.getCellRect(row, column, false).x
-                            + studentTable.getCellRect(row, column, false).width / 2;
-                    showStudentDialog(modelRow, event.getX() < midpoint);
+                    showStudentDialog(modelRow);
                 }
             }
         });
@@ -449,16 +493,7 @@ public class AdminMasterlistFrame {
         container.setBorder(BorderFactory.createLineBorder(new Color(230, 235, 240), 1));
 
         String[] columns = {"STUDENT ID", "FULL NAME", "PROGRAM & YEAR", "STATUS", "ACTION"};
-        Object[][] data = {
-                {"2025-0011", "Justine Rivera", "BS Information Tech - 3rd Year", "Enrolled", "View Profile | Edit"},
-                {"2025-0012", "Mark Mendoza", "BS Civil Engineering - 2nd Year", "Unenrolled", "View Profile | Edit"},
-                {"2026-0145", "Sophia Lauren", "BS Accountancy - 1st Year", "Pending", "View Profile | Edit"},
-                {"2025-0013", "Prince Cariaga", "BS Information Tech - 3rd Year", "Conflict", "View Profile | Edit"},
-                {"2024-0089", "Anna Delos Reyes", "BS Psychology - 4th Year", "Enrolled", "View Profile | Edit"},
-                {"2025-0210", "Kevin Tan", "BS Computer Science - 2nd Year", "Enrolled", "View Profile | Edit"}
-        };
-
-        DefaultTableModel model = new DefaultTableModel(data, columns) {
+        DefaultTableModel model = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
@@ -649,17 +684,12 @@ public class AdminMasterlistFrame {
 
     private void updateStats() {
         int enrolled = 0;
-        int pending = 0;
-        if (studentTableModel != null) {
-            for (int row = 0; row < studentTableModel.getRowCount(); row++) {
-                String status = String.valueOf(studentTableModel.getValueAt(row, 3));
-                if (status.equalsIgnoreCase("Enrolled")) enrolled++;
-                if (status.equalsIgnoreCase("Pending")) pending++;
-            }
+        for (StudentDirectoryRepository.StudentSummary student : students) {
+            if ("Enrolled".equalsIgnoreCase(student.enrollmentStatus())) enrolled++;
         }
-        if (totalEnrolledValue != null) totalEnrolledValue.setText(String.valueOf(enrolled));
+        if (totalEnrolledValue != null) totalEnrolledValue.setText(String.valueOf(students.size()));
         if (activeRegularValue != null) activeRegularValue.setText(String.valueOf(enrolled));
-        if (pendingRegistrationsValue != null) pendingRegistrationsValue.setText(String.valueOf(pending));
+        if (pendingRegistrationsValue != null) pendingRegistrationsValue.setText(String.valueOf(students.size() - enrolled));
         updateFooter();
     }
 
@@ -669,44 +699,13 @@ public class AdminMasterlistFrame {
         }
     }
 
-    private void showStudentDialog(int modelRow, boolean viewOnly) {
-        if (studentTableModel == null) return;
-        boolean editing = modelRow >= 0 && !viewOnly;
-        JTextField idField = new JTextField(modelRow >= 0 ? String.valueOf(studentTableModel.getValueAt(modelRow, 0)) : "");
-        JTextField nameField = new JTextField(modelRow >= 0 ? String.valueOf(studentTableModel.getValueAt(modelRow, 1)) : "");
-        JTextField programField = new JTextField(modelRow >= 0 ? String.valueOf(studentTableModel.getValueAt(modelRow, 2)) : "");
-        JComboBox<String> statusField = new JComboBox<>(new String[]{"Enrolled", "Pending", "Unenrolled", "Conflict"});
-        if (modelRow >= 0) statusField.setSelectedItem(String.valueOf(studentTableModel.getValueAt(modelRow, 3)));
-        JPanel form = new JPanel(new GridLayout(4, 2, 8, 8));
-        form.add(new JLabel("Student ID:")); form.add(idField);
-        form.add(new JLabel("Full Name:")); form.add(nameField);
-        form.add(new JLabel("Program & Year:")); form.add(programField);
-        form.add(new JLabel("Status:")); form.add(statusField);
-        idField.setEditable(editing || modelRow < 0);
-        nameField.setEditable(editing || modelRow < 0);
-        programField.setEditable(editing || modelRow < 0);
-        statusField.setEnabled(editing || modelRow < 0);
-        String title = modelRow < 0 ? "Add Student" : (viewOnly ? "Student Profile" : "Edit Student");
-        int result = JOptionPane.showConfirmDialog(window, form, title,
-                modelRow >= 0 && viewOnly ? JOptionPane.DEFAULT_OPTION : JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE);
-        if (result == JOptionPane.OK_OPTION && modelRow < 0) {
-            if (idField.getText().trim().isEmpty() || nameField.getText().trim().isEmpty()
-                    || programField.getText().trim().isEmpty()) {
-                JOptionPane.showMessageDialog(window, "Please complete all student fields.", "Missing Information", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-            studentTableModel.addRow(new Object[]{idField.getText().trim(), nameField.getText().trim(),
-                    programField.getText().trim(), statusField.getSelectedItem(), "View Profile | Edit"});
-            updateStats();
-        } else if (result == JOptionPane.OK_OPTION && editing) {
-            studentTableModel.setValueAt(idField.getText().trim(), modelRow, 0);
-            studentTableModel.setValueAt(nameField.getText().trim(), modelRow, 1);
-            studentTableModel.setValueAt(programField.getText().trim(), modelRow, 2);
-            studentTableModel.setValueAt(statusField.getSelectedItem(), modelRow, 3);
-            updateStats();
-            applyFilters("");
-        }
+    private void showStudentDialog(int modelRow) {
+        if (studentTableModel == null || modelRow < 0 || modelRow >= studentTableModel.getRowCount()) return;
+        String details = "<html><b>Student ID:</b> " + studentTableModel.getValueAt(modelRow, 0)
+                + "<br><b>Full Name:</b> " + studentTableModel.getValueAt(modelRow, 1)
+                + "<br><b>Program &amp; Year:</b> " + studentTableModel.getValueAt(modelRow, 2)
+                + "<br><b>Enrollment Status:</b> " + studentTableModel.getValueAt(modelRow, 3) + "</html>";
+        JOptionPane.showMessageDialog(window, details, "Student Profile", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void exportVisibleRows() {
@@ -777,7 +776,7 @@ public class AdminMasterlistFrame {
         public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
                                                         boolean focused, int row, int column) {
             JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, selected, focused, row, column);
-            label.setText("View Profile   |   Edit");
+            label.setText("View Profile");
             label.setForeground(new Color(40, 100, 230));
             label.setFont(new Font("SansSerif", Font.BOLD, 11));
             label.setBorder(new EmptyBorder(0, 10, 0, 10));

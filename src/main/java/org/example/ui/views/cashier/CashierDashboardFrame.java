@@ -11,6 +11,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -61,6 +62,7 @@ public class CashierDashboardFrame {
     private final Cashier cashier;
     private final CashierPaymentService paymentService = new CashierPaymentService();
     private final List<PaymentRowData> paymentsData = new ArrayList<>();
+    private PaymentRepository.PaymentSummary paymentSummary = new PaymentRepository.PaymentSummary(0, 0, 0);
     private DefaultTableModel paymentModel;
     private JTable paymentTable;
     private TableRowSorter<DefaultTableModel> paymentSorter;
@@ -72,7 +74,7 @@ public class CashierDashboardFrame {
 
     public CashierDashboardFrame(Cashier cashier) {
         this.cashier = cashier;
-        initMockPayments();
+        refreshPaymentData();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
@@ -85,16 +87,30 @@ public class CashierDashboardFrame {
         window.setVisible(true);
     }
 
-    private void initMockPayments() {
+    private void refreshPaymentData() {
         try {
+            paymentsData.clear();
             for (PaymentRepository.PaymentRecord payment : paymentService.findRecent()) {
                 paymentsData.add(new PaymentRowData(payment.referenceNumber(), payment.studentName(), payment.programId(),
-                        formatAmount(payment.amount()), payment.paymentType(), payment.status(), payment.paymentDate().toString()));
+                        formatAmount(payment.amount()), payment.paymentType(), displayStatus(payment.status()),
+                        payment.paymentDate().toLocalDateTime().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy h:mm a", Locale.US))));
             }
+            paymentSummary = paymentService.findSummary();
         } catch (SQLException | SecurityException exception) {
-            JOptionPane.showMessageDialog(window, "Unable to load payment records. Run the payments SQL migration first.",
+            JOptionPane.showMessageDialog(window, "Unable to load cashier payment data from the database.",
                     "Payment Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private String displayStatus(String status) {
+        if (status == null) return "Unknown";
+        return switch (status.toUpperCase(Locale.ROOT)) {
+            case "VERIFIED" -> "Verified";
+            case "PENDING" -> "Pending";
+            case "REJECTED" -> "Rejected";
+            case "VOIDED" -> "Voided";
+            default -> status;
+        };
     }
 
     private JPanel createContent() {
@@ -287,7 +303,7 @@ public class CashierDashboardFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Head Cashier");
+        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Cashier");
         userName.setFont(new Font("SansSerif", Font.BOLD, 12));
         userName.setForeground(TEXT);
         JLabel userSub = new JLabel("Finance Department · Cashier");
@@ -343,10 +359,10 @@ public class CashierDashboardFrame {
 
         JPanel summaryCardsContainer = new JPanel(new GridLayout(1, 4, 16, 0));
         summaryCardsContainer.setOpaque(false);
-        summaryCardsContainer.add(createSummaryBlock(formatAmount(calculateTodaysCollections()), "Today's Collections", new Color(235, 242, 233)));
-        summaryCardsContainer.add(createSummaryBlock(String.valueOf(countPendingPayments()), "Pending Verifications", new Color(248, 237, 219)));
+        summaryCardsContainer.add(createSummaryBlock(formatAmount(paymentSummary.todayTotal()), "Today's Collections", new Color(235, 242, 233)));
+        summaryCardsContainer.add(createSummaryBlock(String.valueOf(paymentSummary.pendingCount()), "Pending Verifications", new Color(248, 237, 219)));
         summaryCardsContainer.add(createSummaryButtonBlock("Verify Payment", "Action Required", new Color(235, 242, 233)));
-        summaryCardsContainer.add(createSummaryBlock(formatAmount(calculateMonthCollected()), "Total Collected (Month)", new Color(248, 237, 219)));
+        summaryCardsContainer.add(createSummaryBlock(formatAmount(paymentSummary.monthTotal()), "Total Collected (Month)", new Color(248, 237, 219)));
 
         contentWrapper.add(summaryCardsContainer, BorderLayout.NORTH);
 
@@ -612,22 +628,10 @@ public class CashierDashboardFrame {
         approve.setForeground(Color.WHITE);
         approve.setFocusPainted(false);
         reject.addActionListener(event -> {
-            payment.status = "Rejected";
-            refreshPaymentModel();
-            updatePaymentMetrics();
-            applyPaymentFilters();
-            dialog.dispose();
-            JOptionPane.showMessageDialog(window, "Payment " + payment.refNo + " was rejected.", "Payment Rejected", JOptionPane.WARNING_MESSAGE);
+            updatePendingPayment(payment, "REJECTED", dialog);
         });
         approve.addActionListener(event -> {
-            payment.status = "Verified";
-            refreshPaymentModel();
-            updatePaymentMetrics();
-            applyPaymentFilters();
-            dialog.dispose();
-            JOptionPane.showMessageDialog(window,
-                    "Payment verified successfully.\nReceipt ready to print: " + payment.refNo,
-                    "Payment Verified", JOptionPane.INFORMATION_MESSAGE);
+            updatePendingPayment(payment, "VERIFIED", dialog);
         });
         actions.add(reject);
         actions.add(approve);
@@ -638,32 +642,30 @@ public class CashierDashboardFrame {
         dialog.setVisible(true);
     }
 
+    private void updatePendingPayment(PaymentRowData payment, String newStatus, JDialog dialog) {
+        try {
+            paymentService.updatePendingPaymentStatus(payment.refNo, newStatus);
+            refreshPaymentData();
+            refreshPaymentModel();
+            updatePaymentMetrics();
+            applyPaymentFilters();
+            dialog.dispose();
+            String message = "VERIFIED".equals(newStatus)
+                    ? "Payment verified successfully.\nReceipt ready to print: " + payment.refNo
+                    : "Payment " + payment.refNo + " was rejected.";
+            JOptionPane.showMessageDialog(window, message,
+                    "VERIFIED".equals(newStatus) ? "Payment Verified" : "Payment Rejected",
+                    "VERIFIED".equals(newStatus) ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(dialog, "Unable to update the payment status in the database.",
+                    "Payment Update Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private void updatePaymentMetrics() {
-        if (todaysCollectionsValue != null) todaysCollectionsValue.setText(formatAmount(calculateTodaysCollections()));
-        if (pendingVerificationsValue != null) pendingVerificationsValue.setText(String.valueOf(countPendingPayments()));
-        if (totalCollectedValue != null) totalCollectedValue.setText(formatAmount(calculateMonthCollected()));
-    }
-
-    private double calculateTodaysCollections() {
-        double total = 0;
-        for (PaymentRowData payment : paymentsData) {
-            if ("Verified".equals(payment.status) && payment.timestamp.toLowerCase(Locale.ROOT).contains("today")) total += parseAmount(payment.amount);
-        }
-        return total;
-    }
-
-    private double calculateMonthCollected() {
-        double total = 0;
-        for (PaymentRowData payment : paymentsData) {
-            if ("Verified".equals(payment.status)) total += parseAmount(payment.amount);
-        }
-        return total;
-    }
-
-    private int countPendingPayments() {
-        int count = 0;
-        for (PaymentRowData payment : paymentsData) if ("Pending".equals(payment.status)) count++;
-        return count;
+        if (todaysCollectionsValue != null) todaysCollectionsValue.setText(formatAmount(paymentSummary.todayTotal()));
+        if (pendingVerificationsValue != null) pendingVerificationsValue.setText(String.valueOf(paymentSummary.pendingCount()));
+        if (totalCollectedValue != null) totalCollectedValue.setText(formatAmount(paymentSummary.monthTotal()));
     }
 
     private double parseAmount(String amount) {

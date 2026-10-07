@@ -44,7 +44,6 @@ public class AdminLogsFrame extends JFrame {
     private static final int PAGE_SIZE = 10;
 
     public AdminLogsFrame() {
-        initializeAuditLogs();
         setTitle("REY SIS - System Audit Logs");
         setSize(1200, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -53,21 +52,6 @@ public class AdminLogsFrame extends JFrame {
 
         add(createSidebar(), BorderLayout.WEST);
         add(createDynamicMainContent(), BorderLayout.CENTER);
-    }
-
-    private void initializeAuditLogs() {
-        auditLogs.add(new AuditLog("Oct 5, 2026 09:35 AM", "admin.super", "192.168.1.105", "Updated Section Capacity", "Section OOP202-A", "Success", "Courses"));
-        auditLogs.add(new AuditLog("Oct 5, 2026 08:12 AM", "unknown_user", "112.204.15.8", "Failed Login Attempt", "Authentication Auth/Login", "Failed", "Auth"));
-        auditLogs.add(new AuditLog("Oct 4, 2026 04:45 PM", "registrar.main", "192.168.1.55", "Deleted Old Course Data", "Course ACC100 (Archived)", "Warning", "Courses"));
-        auditLogs.add(new AuditLog("Oct 4, 2026 02:30 PM", "faculty.smith", "192.168.2.14", "Exported Grade Sheet", "Section DBMS101-C", "Success", "Student"));
-        auditLogs.add(new AuditLog("Oct 3, 2026 11:20 AM", "admin.super", "192.168.1.105", "Approved Enrollment", "Student 2025-0013", "Success", "Student"));
-        auditLogs.add(new AuditLog("Oct 3, 2026 10:05 AM", "registrar.main", "192.168.1.55", "Updated Student Profile", "Student 2025-0011", "Success", "Student"));
-        auditLogs.add(new AuditLog("Oct 2, 2026 03:15 PM", "unknown_user", "112.204.15.8", "Failed Login Attempt", "Authentication Auth/Login", "Failed", "Auth"));
-        auditLogs.add(new AuditLog("Oct 2, 2026 01:40 PM", "admin.super", "192.168.1.105", "Added New Section", "Section OS301-A", "Success", "Courses"));
-        auditLogs.add(new AuditLog("Oct 1, 2026 04:10 PM", "faculty.smith", "192.168.2.14", "Viewed Student Records", "Masterlist", "Warning", "Student"));
-        auditLogs.add(new AuditLog("Oct 1, 2026 09:00 AM", "registrar.main", "192.168.1.55", "Signed In", "Admin Portal", "Success", "Auth"));
-        auditLogs.add(new AuditLog("Sep 30, 2026 02:20 PM", "admin.super", "192.168.1.105", "Edited Course Details", "Course DBMS101", "Success", "Courses"));
-        auditLogs.add(new AuditLog("Sep 29, 2026 08:45 AM", "unknown_user", "112.204.15.8", "Failed Login Attempt", "Authentication Auth/Login", "Failed", "Auth"));
     }
 
     private JPanel createSidebar() {
@@ -186,9 +170,9 @@ public class AdminLogsFrame extends JFrame {
         JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
         filters.setBackground(Color.WHITE);
         filters.setBorder(new EmptyBorder(20, 0, 20, 0));
-        dateFilter = createCombo(new String[]{"All Dates", "Oct 1 - Oct 5, 2026", "Sep 29 - Sep 30, 2026"}, 180);
-        moduleFilter = createCombo(new String[]{"All Modules", "Auth", "Courses", "Student"}, 150);
-        statusFilter = createCombo(new String[]{"All Statuses", "Success", "Failed", "Warning"}, 130);
+        dateFilter = createCombo(new String[]{"All Dates"}, 180);
+        moduleFilter = createCombo(new String[]{"All Modules"}, 150);
+        statusFilter = createCombo(new String[]{"All Statuses"}, 130);
         JButton filter = new JButton("Filter");
         filter.setFont(new Font("Segoe UI", Font.BOLD, 13));
         filter.setForeground(Color.WHITE);
@@ -303,11 +287,19 @@ public class AdminLogsFrame extends JFrame {
         int total = filteredAuditCount;
         int start = total == 0 ? 0 : currentPage * PAGE_SIZE + 1;
         int end = Math.min(total, (currentPage + 1) * PAGE_SIZE);
-        entriesLabel.setText("Showing " + start + " to " + end + " of " + total + " entries");
+        entriesLabel.setText(auditLogs.isEmpty()
+                ? "Audit log data is not available in the existing database schema."
+                : "Showing " + start + " to " + end + " of " + total + " entries");
         pageLabel.setText(String.valueOf(currentPage + 1));
     }
 
     private void exportAuditLogs() {
+        if (auditLogs.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Audit log data is not available in the existing database schema.",
+                    "No Audit Data", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Export Audit Logs CSV");
         chooser.setSelectedFile(new File("system-audit-logs.csv"));
@@ -338,106 +330,7 @@ public class AdminLogsFrame extends JFrame {
     }
 
     private JPanel createMainContent() {
-        JPanel main = new JPanel(new BorderLayout(0, 20));
-        main.setBackground(Color.WHITE);
-        main.setBorder(new EmptyBorder(40, 40, 40, 40));
-
-        // --- Top Header ---
-        JPanel headerPanel = new JPanel(new BorderLayout());
-        headerPanel.setBackground(Color.WHITE);
-
-        JLabel title = new JLabel("System Audit Logs");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 26));
-        title.setForeground(TEXT_DARK);
-
-        RoundedPanel exportBtn = new RoundedPanel(8, Color.WHITE, BORDER_COLOR);
-        exportBtn.setBorder(new EmptyBorder(8, 20, 8, 20));
-        exportBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        JLabel exportLbl = new JLabel("Export CSV");
-        exportLbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        exportLbl.setForeground(TEXT_DARK);
-        exportBtn.add(exportLbl);
-
-        headerPanel.add(title, BorderLayout.WEST);
-        headerPanel.add(exportBtn, BorderLayout.EAST);
-
-        // --- Filters Area ---
-        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
-        filterPanel.setBackground(Color.WHITE);
-        filterPanel.setBorder(new EmptyBorder(20, 0, 20, 0));
-
-        filterPanel.add(createFilterDropdown("Oct 1 - Oct 5, 2026", 180));
-        filterPanel.add(createFilterDropdown("All Modules", 150));
-        filterPanel.add(createFilterDropdown("All Statuses", 130));
-
-        RoundedPanel filterBtn = new RoundedPanel(8, BRAND_GREEN, BRAND_GREEN);
-        filterBtn.setBorder(new EmptyBorder(8, 25, 8, 25));
-        filterBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        JLabel filterLbl = new JLabel("Filter");
-        filterLbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        filterLbl.setForeground(Color.WHITE);
-        filterBtn.add(filterLbl);
-        filterPanel.add(filterBtn);
-
-        JPanel topSection = new JPanel(new BorderLayout());
-        topSection.setBackground(Color.WHITE);
-        topSection.add(headerPanel, BorderLayout.NORTH);
-        topSection.add(filterPanel, BorderLayout.SOUTH);
-
-        // --- Table Area ---
-        JPanel tableContainer = new JPanel(new BorderLayout());
-        tableContainer.setBackground(Color.WHITE);
-
-        // Table Header
-        JPanel tableHeader = new JPanel(new GridLayout(1, 4, 10, 0));
-        tableHeader.setBackground(BG_LIGHT);
-        tableHeader.setBorder(new EmptyBorder(15, 20, 15, 20));
-
-        String[] headers = {"Timestamp", "User / IP", "Action Details", "Status"};
-        for (String h : headers) {
-            JLabel hLbl = new JLabel(h);
-            hLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            hLbl.setForeground(TEXT_MUTED);
-            tableHeader.add(hLbl);
-        }
-
-        // Table Body
-        JPanel tableBody = new JPanel();
-        tableBody.setLayout(new BoxLayout(tableBody, BoxLayout.Y_AXIS));
-        tableBody.setBackground(Color.WHITE);
-
-        tableBody.add(createLogRow("Oct 5, 2026", "09:35 AM", "admin.super", "192.168.1.105", "Updated Section Capacity", "Target: Section OOP202-A", "Success"));
-        tableBody.add(createLogRow("Oct 5, 2026", "08:12 AM", "unknown_user", "112.204.15.8", "Failed Login Attempt", "Target: Authentication Auth/Login", "Failed"));
-        tableBody.add(createLogRow("Oct 4, 2026", "16:45 PM", "registrar.main", "192.168.1.55", "Deleted Old Course Data", "Target: Course ACC100 (Archived)", "Warning"));
-        tableBody.add(createLogRow("Oct 4, 2026", "14:30 PM", "faculty.smith", "192.168.2.14", "Exported Grade Sheet", "Target: Section DBMS101-C", "Success"));
-
-        tableContainer.add(tableHeader, BorderLayout.NORTH);
-        tableContainer.add(tableBody, BorderLayout.CENTER);
-
-        // --- Pagination Area ---
-        JPanel paginationPanel = new JPanel(new BorderLayout());
-        paginationPanel.setBackground(Color.WHITE);
-        paginationPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
-
-        JLabel entriesLbl = new JLabel("Showing 1 to 4 of 128 entries");
-        entriesLbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        entriesLbl.setForeground(TEXT_MUTED);
-
-        JPanel pageBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
-        pageBtns.setBackground(Color.WHITE);
-        pageBtns.add(createPageButton("<", false));
-        pageBtns.add(createPageButton("1", true));
-        pageBtns.add(createPageButton(">", false));
-
-        paginationPanel.add(entriesLbl, BorderLayout.WEST);
-        paginationPanel.add(pageBtns, BorderLayout.EAST);
-
-        // Put it all together
-        main.add(topSection, BorderLayout.NORTH);
-        main.add(tableContainer, BorderLayout.CENTER);
-        main.add(paginationPanel, BorderLayout.SOUTH);
-
-        return main;
+        return createDynamicMainContent();
     }
 
     private JPanel createFilterDropdown(String text, int width) {

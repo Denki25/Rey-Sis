@@ -1,6 +1,8 @@
 package org.example.ui.views.cashier;
 
+import org.example.data.PaymentRepository;
 import org.example.model.Cashier;
+import org.example.service.CashierPaymentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -14,6 +16,7 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -31,6 +34,7 @@ public class CashierReportsFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Reports");
     private final Cashier cashier;
+    private final CashierPaymentService paymentService = new CashierPaymentService();
     private final List<ReportData> reports = new ArrayList<>();
     private DefaultTableModel reportModel;
     private TableRowSorter<DefaultTableModel> reportSorter;
@@ -42,20 +46,12 @@ public class CashierReportsFrame {
 
     public CashierReportsFrame(Cashier cashier) {
         this.cashier = cashier;
-        initReports();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
         window.setSize(1360, 920);
         window.setLocationRelativeTo(null);
         window.setContentPane(createContent());
-    }
-
-    private void initReports() {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy, h:mm a", Locale.US);
-        reports.add(new ReportData("Daily Collection - Oct 05", "PDF", LocalDateTime.now().minusHours(2).format(formatter)));
-        reports.add(new ReportData("Monthly Revenue - September", "CSV", LocalDateTime.now().minusDays(5).format(formatter)));
-        reports.add(new ReportData("Reconciliation Audit - Week 3", "PDF", LocalDateTime.now().minusDays(8).format(formatter)));
     }
 
     public void showWindow() {
@@ -231,7 +227,7 @@ public class CashierReportsFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Maria Santos");
+        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Cashier");
         userName.setFont(new Font("SansSerif", Font.BOLD, 12));
         userName.setForeground(TEXT);
         JLabel userSub = new JLabel("Finance Department · Cashier");
@@ -266,7 +262,7 @@ public class CashierReportsFrame {
         heading.setFont(new Font("Serif", Font.BOLD, 28));
         heading.setForeground(DEEP_GREEN);
 
-        JLabel subtitle = new JLabel("Generate collection summaries, revenue reports, and audit logs.");
+        JLabel subtitle = new JLabel("Generate reports from recorded payments. Report history is kept for this session only.");
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 12));
         subtitle.setForeground(MUTED);
 
@@ -342,7 +338,7 @@ public class CashierReportsFrame {
         CardPanel card = new CardPanel(Color.WHITE);
         card.setLayout(new BorderLayout(0, 14));
         card.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
-        JLabel title = new JLabel("Recently Generated Reports");
+        JLabel title = new JLabel("Reports Generated This Session");
         title.setFont(new Font("SansSerif", Font.BOLD, 16));
         title.setForeground(DEEP_GREEN);
         card.add(title, BorderLayout.NORTH);
@@ -397,18 +393,33 @@ public class CashierReportsFrame {
     private void generateReport(String title, String actionText) {
         String format = actionText.contains("CSV") ? "CSV" : "PDF";
         String reportTitle = title + " - " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.US));
-        reports.add(0, new ReportData(reportTitle, format, currentTimestamp()));
-        refreshReportModel();
-        applyReportFilter();
-        if ("CSV".equals(format)) {
-            exportMonthlyRevenue();
-        } else {
-            showGeneratedReport(title);
+        try {
+            List<PaymentRepository.PaymentRecord> payments = findReportPayments(title);
+            ReportData report = new ReportData(reportTitle, format, currentTimestamp(), payments);
+            reports.add(0, report);
+            refreshReportModel();
+            applyReportFilter();
+            if ("CSV".equals(format)) {
+                exportMonthlyRevenue(payments);
+            } else {
+                showGeneratedReport(title, payments);
+            }
+        } catch (Exception exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load payment data for this report.",
+                    "Report Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    private void showGeneratedReport(String title) {
-        JTextArea report = new JTextArea(buildReportText(title));
+    private List<PaymentRepository.PaymentRecord> findReportPayments(String title) throws java.sql.SQLException {
+        LocalDate today = LocalDate.now();
+        if (title.startsWith("Monthly Revenue")) {
+            return paymentService.findPaymentsBetween(today.withDayOfMonth(1), today.withDayOfMonth(1).plusMonths(1));
+        }
+        return paymentService.findPaymentsBetween(today, today.plusDays(1));
+    }
+
+    private void showGeneratedReport(String title, List<PaymentRepository.PaymentRecord> payments) {
+        JTextArea report = new JTextArea(buildReportText(title, payments));
         report.setEditable(false);
         report.setFont(new Font("Monospaced", Font.PLAIN, 13));
         JButton print = new JButton("Print Report");
@@ -422,25 +433,42 @@ public class CashierReportsFrame {
         JOptionPane.showMessageDialog(window, panel, title, JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private String buildReportText(String title) {
-        if (title.startsWith("Daily Collection")) {
-            return "REY SIS UNIVERSITY\nDAILY COLLECTION REPORT\n\n"
-                    + "Date: " + currentTimestamp() + "\n\n"
-                    + "Cash:       ₱ 8,000.00\nGCash:      ₱ 12,500.00\nCard:       ₱ 21,750.00\nBank:       ₱ 15,200.00\n"
-                    + "Total:      ₱ 57,450.00\n";
+    private String buildReportText(String title, List<PaymentRepository.PaymentRecord> payments) {
+        java.util.Map<String, Double> totals = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        double total = 0;
+        for (PaymentRepository.PaymentRecord payment : payments) {
+            if (!"VERIFIED".equalsIgnoreCase(payment.status())) continue;
+            totals.merge(payment.paymentType(), payment.amount(), Double::sum);
+            total += payment.amount();
         }
-        return "REY SIS UNIVERSITY\nRECONCILIATION LOG\n\nGenerated: " + currentTimestamp()
-                + "\nCash Drawer: Balanced\nDigital: Balanced\nBank / Card: Review variance\n";
+        StringBuilder report = new StringBuilder("REY SIS UNIVERSITY\n")
+                .append(title.toUpperCase(Locale.ROOT)).append(" REPORT\n\n")
+                .append("Generated: ").append(currentTimestamp()).append("\n\n");
+        for (java.util.Map.Entry<String, Double> entry : totals.entrySet()) {
+            report.append(entry.getKey()).append(": ").append(formatAmount(entry.getValue())).append('\n');
+        }
+        report.append("Verified total: ").append(formatAmount(total)).append("\n")
+                .append("Payment rows: ").append(payments.size()).append('\n');
+        if (title.startsWith("Daily Collection")) {
+            report.append("\nDate: ").append(LocalDate.now());
+        } else if (title.startsWith("Reconciliation")) {
+            report.append("\nSettlement variance is not available: the current database does not store settlement records.");
+        }
+        return report.toString();
     }
 
-    private void exportMonthlyRevenue() {
+    private void exportMonthlyRevenue(List<PaymentRepository.PaymentRecord> payments) {
         JFileChooser chooser = new JFileChooser();
         chooser.setSelectedFile(new java.io.File("rey-sis-monthly-revenue.csv"));
         if (chooser.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return;
         try (PrintWriter writer = new PrintWriter(chooser.getSelectedFile(), StandardCharsets.UTF_8)) {
             writer.println("DATE,REFERENCE,STUDENT,PROGRAM OR ID,METHOD,AMOUNT,STATUS");
-            writer.println("Oct 05, 2026,OR-261005-126,Angela D. Cruz,2024-0187,GCash,12500,Paid");
-            writer.println("Oct 05, 2026,OR-261005-125,Marco Villanueva,2025-0042,Cash,8000,Paid");
+            for (PaymentRepository.PaymentRecord payment : payments) {
+                writer.println(csv(payment.paymentDate().toLocalDateTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)) + ","
+                        + csv(payment.referenceNumber()) + "," + csv(payment.studentName()) + ","
+                        + csv(payment.programId()) + "," + csv(payment.paymentType()) + ","
+                        + payment.amount() + "," + csv(payment.status()));
+            }
             JOptionPane.showMessageDialog(window, "Monthly revenue CSV exported successfully.", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception exception) {
             JOptionPane.showMessageDialog(window, "Unable to export report: " + exception.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
@@ -452,7 +480,17 @@ public class CashierReportsFrame {
         chooser.setSelectedFile(new java.io.File(report.name.replaceAll("[^a-zA-Z0-9.-]", "_") + "." + report.format.toLowerCase(Locale.ROOT)));
         if (chooser.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return;
         try (PrintWriter writer = new PrintWriter(chooser.getSelectedFile(), StandardCharsets.UTF_8)) {
-            writer.print(buildReportText(report.name));
+            if ("CSV".equals(report.format)) {
+                writer.println("DATE,REFERENCE,STUDENT,PROGRAM OR ID,METHOD,AMOUNT,STATUS");
+                for (PaymentRepository.PaymentRecord payment : report.payments) {
+                    writer.println(csv(payment.paymentDate().toLocalDateTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)) + ","
+                            + csv(payment.referenceNumber()) + "," + csv(payment.studentName()) + ","
+                            + csv(payment.programId()) + "," + csv(payment.paymentType()) + ","
+                            + payment.amount() + "," + csv(payment.status()));
+                }
+            } else {
+                writer.print(buildReportText(report.name, report.payments));
+            }
             JOptionPane.showMessageDialog(window, "Report downloaded successfully.", "Download Complete", JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception exception) {
             JOptionPane.showMessageDialog(window, "Unable to save report: " + exception.getMessage(), "Download Error", JOptionPane.ERROR_MESSAGE);
@@ -463,15 +501,25 @@ public class CashierReportsFrame {
         return LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy, h:mm a", Locale.US));
     }
 
+    private String formatAmount(double amount) {
+        return String.format(Locale.US, "₱ %,.2f", amount);
+    }
+
+    private String csv(String value) {
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
     private static class ReportData {
         final String name;
         final String format;
         final String generatedAt;
+        final List<PaymentRepository.PaymentRecord> payments;
 
-        ReportData(String name, String format, String generatedAt) {
+        ReportData(String name, String format, String generatedAt, List<PaymentRepository.PaymentRecord> payments) {
             this.name = name;
             this.format = format;
             this.generatedAt = generatedAt;
+            this.payments = List.copyOf(payments);
         }
     }
 
@@ -510,45 +558,6 @@ public class CashierReportsFrame {
         addTableHeaderCell(tableHeader, "Action", 3, 0.25, gbc, SwingConstants.RIGHT);
 
         tableContainer.add(tableHeader);
-
-        // Mock Data for the table
-        String[][] mockReports = {
-                {"Daily Collection - Oct 05", "PDF", "Today, 5:30 PM"},
-                {"Monthly Revenue - September", "CSV", "Oct 01, 2026, 9:00 AM"},
-                {"Reconciliation Audit - Week 3", "PDF", "Sep 28, 2026, 6:15 PM"}
-        };
-
-        for (String[] rowData : mockReports) {
-            JPanel row = new JPanel(new GridBagLayout());
-            row.setOpaque(false);
-            row.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(242, 243, 240)),
-                    BorderFactory.createEmptyBorder(14, 12, 14, 12)
-            ));
-
-            JLabel rName = new JLabel(rowData[0]);
-            rName.setFont(new Font("SansSerif", Font.BOLD, 12));
-            rName.setForeground(TEXT);
-            gbc.gridx = 0; gbc.weightx = 0.35; row.add(rName, gbc);
-
-            JLabel rFormat = new JLabel(rowData[1]);
-            rFormat.setFont(new Font("SansSerif", Font.PLAIN, 11));
-            rFormat.setForeground(MUTED);
-            gbc.gridx = 1; gbc.weightx = 0.15; row.add(rFormat, gbc);
-
-            JLabel rDate = new JLabel(rowData[2]);
-            rDate.setFont(new Font("SansSerif", Font.PLAIN, 11));
-            rDate.setForeground(TEXT);
-            gbc.gridx = 2; gbc.weightx = 0.25; row.add(rDate, gbc);
-
-            JLabel dlLink = new JLabel("Download", SwingConstants.RIGHT);
-            dlLink.setFont(new Font("SansSerif", Font.BOLD, 11));
-            dlLink.setForeground(new Color(34, 139, 34));
-            dlLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            gbc.gridx = 3; gbc.weightx = 0.25; row.add(dlLink, gbc);
-
-            tableContainer.add(row);
-        }
 
         card.add(tableContainer, BorderLayout.CENTER);
         return card;

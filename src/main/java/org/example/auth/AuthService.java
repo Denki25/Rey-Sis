@@ -8,11 +8,14 @@ import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
 public final class AuthService {
+    private static final Set<String> SUPPORTED_ROLES = Set.of("STUDENT", "ADMIN", "REGISTRAR", "CASHIER");
     private final UserRepository userRepository;
 
     public AuthService() {
@@ -36,6 +39,9 @@ public final class AuthService {
         if (!user.isActive()) {
             return AuthenticationResult.inactive();
         }
+        if (user.getRole() == null || !SUPPORTED_ROLES.contains(user.getRole().toUpperCase(Locale.ROOT))) {
+            return AuthenticationResult.invalid("Invalid username or password.");
+        }
         return AuthenticationResult.success(user);
     }
 
@@ -44,9 +50,7 @@ public final class AuthService {
             return false;
         }
         if (!passwordHash.startsWith("pbkdf2$")) {
-            return MessageDigest.isEqual(
-                    passwordHash.getBytes(StandardCharsets.UTF_8),
-                    new String(password).getBytes(StandardCharsets.UTF_8));
+            return false;
         }
         try {
             String[] parts = passwordHash.split("\\$", -1);

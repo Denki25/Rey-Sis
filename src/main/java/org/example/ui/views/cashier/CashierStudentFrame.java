@@ -1,6 +1,8 @@
 package org.example.ui.views.cashier;
 
 import org.example.model.Cashier;
+import org.example.data.PaymentRepository;
+import org.example.service.CashierPaymentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -12,6 +14,7 @@ import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -26,6 +29,7 @@ public class CashierStudentFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Student Ledger Accounts");
     private final Cashier cashier;
+    private final CashierPaymentService paymentService = new CashierPaymentService();
     private final List<StudentRowData> studentData = new ArrayList<>();
     private DefaultTableModel studentModel;
     private JTable studentTable;
@@ -38,7 +42,7 @@ public class CashierStudentFrame {
 
     public CashierStudentFrame(Cashier cashier) {
         this.cashier = cashier;
-        initMockStudents();
+        loadStudents();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
@@ -51,10 +55,19 @@ public class CashierStudentFrame {
         window.setVisible(true);
     }
 
-    private void initMockStudents() {
-        studentData.add(new StudentRowData("2025-0011", "Justine Rivera", "BSIT - 3rd Year", "₱ 18,250.00", "Pending Dues", new Color(218, 145, 33)));
-        studentData.add(new StudentRowData("2024-0187", "Angela D. Cruz", "BSBA - 3rd Year", "₱ 0.00", "Cleared", new Color(34, 139, 34)));
-        studentData.add(new StudentRowData("2023-0744", "Lea Castillo", "BSED - 4th Year", "₱ 12,800.00", "Overdue", new Color(200, 50, 50)));
+    private void loadStudents() {
+        try {
+            for (PaymentRepository.PaymentStudent student : paymentService.findStudentsWithBalances()) {
+                boolean outstanding = student.tuitionBalance() > 0;
+                studentData.add(new StudentRowData(student.studentId(), student.name(), student.program(),
+                        student.tuitionAssessed(), student.verifiedPayments(), student.tuitionBalance(),
+                        outstanding ? "Pending Dues" : "Cleared",
+                        outstanding ? new Color(218, 145, 33) : new Color(34, 139, 34)));
+            }
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load student account records from the database.",
+                    "Student Accounts Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JPanel createContent() {
@@ -233,7 +246,7 @@ public class CashierStudentFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Head Cashier");
+        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Cashier");
         userName.setFont(new Font("SansSerif", Font.BOLD, 12));
         userName.setForeground(TEXT);
         JLabel userSub = new JLabel("Finance Department · Cashier");
@@ -280,7 +293,7 @@ public class CashierStudentFrame {
         CardPanel card = new CardPanel(Color.WHITE);
         card.setLayout(new BorderLayout(0, 12));
         card.setBorder(BorderFactory.createEmptyBorder(16, 20, 16, 20));
-        studentModel = new DefaultTableModel(new Object[]{"STUDENT ID", "NAME", "PROGRAM / YEAR", "OUTSTANDING", "ACCOUNT STATUS"}, 0) {
+        studentModel = new DefaultTableModel(new Object[]{"STUDENT ID", "NAME", "PROGRAM", "OUTSTANDING", "ACCOUNT STATUS"}, 0) {
             public boolean isCellEditable(int row, int column) { return false; }
         };
         for (StudentRowData data : studentData) {
@@ -343,13 +356,12 @@ public class CashierStudentFrame {
         center.add(info);
         center.add(Box.createVerticalStrut(10));
 
-        JLabel feesTitle = new JLabel("Itemized Fee History");
+        JLabel feesTitle = new JLabel("Tuition Summary");
         feesTitle.setFont(new Font("SansSerif", Font.BOLD, 13));
         center.add(feesTitle);
-        DefaultTableModel fees = new DefaultTableModel(new Object[]{"FEE DESCRIPTION", "ASSESSMENT DATE", "ORIGINAL", "PAID", "BALANCE"}, 0);
-        double balance = parseAmount(student.outstanding);
-        fees.addRow(new Object[]{"Tuition Fee - 1st Semester", "Oct 01, 2026", formatAmount(balance + 12500), formatAmount(12500), formatAmount(balance)});
-        fees.addRow(new Object[]{"Miscellaneous Fees", "Oct 01, 2026", formatAmount(4500), formatAmount(student.status.equals("Cleared") ? 4500 : 0), formatAmount(student.status.equals("Cleared") ? 0 : 4500)});
+        DefaultTableModel fees = new DefaultTableModel(new Object[]{"DESCRIPTION", "ASSESSED", "PAID", "BALANCE"}, 0);
+        fees.addRow(new Object[]{"Enrolled-course tuition", formatAmount(student.assessed),
+                formatAmount(student.paid), formatAmount(student.balance)});
         JTable feesTable = new JTable(fees);
         feesTable.setEnabled(false);
         center.add(new JScrollPane(feesTable));
@@ -358,9 +370,16 @@ public class CashierStudentFrame {
         JLabel transactionsTitle = new JLabel("Transaction Log");
         transactionsTitle.setFont(new Font("SansSerif", Font.BOLD, 13));
         center.add(transactionsTitle);
-        DefaultTableModel transactions = new DefaultTableModel(new Object[]{"DATE", "OR NUMBER", "METHOD", "AMOUNT PAID"}, 0);
-        transactions.addRow(new Object[]{"Oct 05, 2026", "OR-261005-126", "GCash", formatAmount(12500)});
-        transactions.addRow(new Object[]{"Sep 20, 2026", "OR-260920-102", "Cash", formatAmount(5000)});
+        DefaultTableModel transactions = new DefaultTableModel(new Object[]{"DATE", "REFERENCE", "METHOD", "AMOUNT", "STATUS"}, 0);
+        try {
+            for (PaymentRepository.PaymentRecord payment : paymentService.findByStudentId(student.studentId)) {
+                transactions.addRow(new Object[]{payment.paymentDate(), payment.referenceNumber(), payment.paymentType(),
+                        formatAmount(payment.amount()), payment.status()});
+            }
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load this student's payment history from the database.",
+                    "Payment History Error", JOptionPane.ERROR_MESSAGE);
+        }
         JTable transactionTable = new JTable(transactions);
         transactionTable.setEnabled(false);
         center.add(new JScrollPane(transactionTable));
@@ -397,11 +416,6 @@ public class CashierStudentFrame {
         } catch (Exception exception) {
             JOptionPane.showMessageDialog(window, "Unable to print statement: " + exception.getMessage(), "Print Error", JOptionPane.ERROR_MESSAGE);
         }
-    }
-
-    private double parseAmount(String value) {
-        String numeric = value.replaceAll("[^0-9.,]", "").replace(",", "");
-        return numeric.isEmpty() ? 0 : Double.parseDouble(numeric);
     }
 
     private String formatAmount(double value) {
@@ -524,14 +538,21 @@ public class CashierStudentFrame {
         String name;
         String programYr;
         String outstanding;
+        double assessed;
+        double paid;
+        double balance;
         String status;
         Color statusColor;
 
-        StudentRowData(String studentId, String name, String programYr, String outstanding, String status, Color statusColor) {
+        StudentRowData(String studentId, String name, String programYr, double assessed, double paid, double balance,
+                       String status, Color statusColor) {
             this.studentId = studentId;
             this.name = name;
             this.programYr = programYr;
-            this.outstanding = outstanding;
+            this.assessed = assessed;
+            this.paid = paid;
+            this.balance = balance;
+            this.outstanding = String.format(Locale.US, "₱ %,.2f", balance);
             this.status = status;
             this.statusColor = statusColor;
         }

@@ -1,6 +1,8 @@
 package org.example.ui.views.cashier;
 
 import org.example.model.Cashier;
+import org.example.data.PaymentRepository;
+import org.example.service.CashierPaymentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -10,9 +12,11 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
@@ -28,6 +32,7 @@ public class CashierReconsilationFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Reconciliation");
     private final Cashier cashier;
+    private final CashierPaymentService paymentService = new CashierPaymentService();
     private final List<Double> expectedValues = new ArrayList<>();
     private final List<JTextField> actualFields = new ArrayList<>();
     private final List<JLabel> statusLabels = new ArrayList<>();
@@ -35,6 +40,8 @@ public class CashierReconsilationFrame {
     private JLabel totalShiftValue;
     private JButton submitSettlementButton;
     private boolean settlementSubmitted;
+    private boolean paymentDataLoaded;
+    private Map<String, Double> todayTotals = Map.of();
 
     public CashierReconsilationFrame() {
         this(null);
@@ -42,6 +49,7 @@ public class CashierReconsilationFrame {
 
     public CashierReconsilationFrame(Cashier cashier) {
         this.cashier = cashier;
+        loadTodayTotals();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
@@ -52,6 +60,20 @@ public class CashierReconsilationFrame {
 
     public void showWindow() {
         window.setVisible(true);
+    }
+
+    private void loadTodayTotals() {
+        try {
+            Map<String, Double> totals = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (PaymentRepository.PaymentMethodTotal total : paymentService.findTodayTotalsByPaymentType()) {
+                totals.put(total.paymentType(), total.totalAmount());
+            }
+            todayTotals = totals;
+            paymentDataLoaded = true;
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load today's payment totals from the database.",
+                    "Reconciliation Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JPanel createContent() {
@@ -210,10 +232,10 @@ public class CashierReconsilationFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Maria Santos");
+        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Cashier");
         userName.setFont(new Font("SansSerif", Font.BOLD, 12));
         userName.setForeground(TEXT);
-        JLabel userSub = new JLabel("Counter 03");
+        JLabel userSub = new JLabel("Cashier");
         userSub.setFont(new Font("SansSerif", Font.PLAIN, 10));
         userSub.setForeground(MUTED);
         userText.add(userName);
@@ -242,7 +264,7 @@ public class CashierReconsilationFrame {
         heading.setFont(new Font("SansSerif", Font.BOLD, 22));
         heading.setForeground(TEXT);
 
-        JLabel subtitle = new JLabel("Counter 03 • " + (cashier != null ? cashier.getName() : "Maria Santos") + " • Oct 5, 2026");
+        JLabel subtitle = new JLabel((cashier != null ? cashier.getName() : "Cashier") + " • " + java.time.LocalDate.now());
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 12));
         subtitle.setForeground(MUTED);
 
@@ -255,9 +277,11 @@ public class CashierReconsilationFrame {
         gridWrapper.setOpaque(false);
         gridWrapper.setBorder(BorderFactory.createEmptyBorder(0, 28, 24, 28));
 
-        gridWrapper.add(createReconCard("Cash Drawer", "SYSTEM EXPECTED", "P 54,000.00", "ACTUAL COUNT", "P 54,000.00", "Balanced: P 0.00", true));
-        gridWrapper.add(createReconCard("Digital (GCash/Maya)", "SYSTEM EXPECTED", "P 73,650.00", "TERMINAL BATCH TOTAL", "P 73,650.00", "Balanced: P 0.00", true));
-        gridWrapper.add(createReconCard("Bank / Card", "SYSTEM EXPECTED", "P 21,000.00", "POS TERMINAL TOTAL", "P 20,500.00", "Short: -P 500.00", false));
+        gridWrapper.add(createReconCard("Cash Drawer", "SYSTEM EXPECTED", getExpectedTotal("Cash"), "ACTUAL COUNT", "0", "", true));
+        gridWrapper.add(createReconCard("Digital (GCash/Maya)", "SYSTEM EXPECTED",
+                getExpectedTotal("GCash", "Maya"), "TERMINAL BATCH TOTAL", "0", "", true));
+        gridWrapper.add(createReconCard("Bank / Card", "SYSTEM EXPECTED",
+                getExpectedTotal("Bank", "Card"), "POS TERMINAL TOTAL", "0", "", true));
         updateReconciliation();
 
         // Bottom Total Block
@@ -271,6 +295,13 @@ public class CashierReconsilationFrame {
         body.add(bottomWrapper);
 
         return body;
+    }
+
+    private String getExpectedTotal(String... paymentTypes) {
+        if (!paymentDataLoaded) return "Unavailable";
+        double total = 0;
+        for (String paymentType : paymentTypes) total += todayTotals.getOrDefault(paymentType, 0.0);
+        return String.format(Locale.US, "₱ %,.2f", total);
     }
 
     private JPanel createReconCard(String title, String expLabel, String expVal, String actLabel, String actVal, String status, boolean isBalanced) {
@@ -292,7 +323,7 @@ public class CashierReconsilationFrame {
         eVal.setFont(new Font("SansSerif", Font.BOLD, 18));
         eVal.setForeground(TEXT);
         eVal.setAlignmentX(Component.LEFT_ALIGNMENT);
-        expectedValues.add(parseAmount(expVal));
+        expectedValues.add(paymentDataLoaded ? parseAmount(expVal) : 0);
 
         JLabel aLabel = new JLabel(actLabel);
         aLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
@@ -300,6 +331,7 @@ public class CashierReconsilationFrame {
         aLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JTextField actField = createAmountField(parseAmount(actVal));
+        actField.setEditable(paymentDataLoaded);
         actField.setFont(new Font("SansSerif", Font.PLAIN, 13));
         actField.setForeground(TEXT);
         actField.setBackground(PAGE);
@@ -366,7 +398,7 @@ public class CashierReconsilationFrame {
         leftPanel.add(Box.createVerticalStrut(6));
         leftPanel.add(totalShiftValue);
 
-        JButton submitBtn = new JButton("Submit Settlement");
+        JButton submitBtn = new JButton("Preview Settlement");
         submitBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
         submitBtn.setForeground(Color.WHITE);
         submitBtn.setBackground(new Color(0, 71, 53));
@@ -374,6 +406,7 @@ public class CashierReconsilationFrame {
         submitBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         submitBtn.setBorder(BorderFactory.createEmptyBorder(12, 28, 12, 28));
         submitSettlementButton = submitBtn;
+        submitBtn.setEnabled(paymentDataLoaded);
         submitBtn.addActionListener(e -> submitSettlement());
 
         JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 8));
@@ -452,11 +485,10 @@ public class CashierReconsilationFrame {
 
     private void showSettlementSummary(double variance) {
         JTextArea summary = new JTextArea("REY SIS UNIVERSITY\nEND-OF-SHIFT SUMMARY REPORT\n\n"
-                + "Cashier: " + (cashier != null ? cashier.getName() : "Maria Santos") + "\n"
-                + "Counter: 03\n"
+                + "Cashier: " + (cashier != null ? cashier.getName() : "Cashier") + "\n"
                 + "Total Shift Collection: " + formatAmount(calculateTotalCollection()) + "\n"
                 + "Variance: " + formatSignedAmount(variance) + "\n\n"
-                + "Settlement submitted successfully.");
+                + "Settlement preview completed. This result is not stored in the current database.");
         summary.setFont(new Font("Monospaced", Font.PLAIN, 13));
         summary.setEditable(false);
         JButton print = new JButton("Print Summary");

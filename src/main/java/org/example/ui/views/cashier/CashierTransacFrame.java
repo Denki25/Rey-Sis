@@ -1,6 +1,8 @@
 package org.example.ui.views.cashier;
 
 import org.example.model.Cashier;
+import org.example.data.PaymentRepository;
+import org.example.service.CashierPaymentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -14,6 +16,9 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -29,6 +34,7 @@ public class CashierTransacFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Transactions History");
     private final Cashier cashier;
+    private final CashierPaymentService paymentService = new CashierPaymentService();
     private final List<TransactionRowData> transactionsData = new ArrayList<>();
     private DefaultTableModel transactionModel;
     private JTable transactionTable;
@@ -48,7 +54,7 @@ public class CashierTransacFrame {
 
     public CashierTransacFrame(Cashier cashier) {
         this.cashier = cashier;
-        initMockTransactions();
+        loadTransactions();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
@@ -61,11 +67,29 @@ public class CashierTransacFrame {
         window.setVisible(true);
     }
 
-    private void initMockTransactions() {
-        transactionsData.add(new TransactionRowData("2:42 PM", "Angela D. Cruz", "2024-0187", "OR-261005-126", "GCash", "₱12,500", "Paid"));
-        transactionsData.add(new TransactionRowData("2:36 PM", "Marco Villanueva", "2025-0042", "OR-261005-125", "Cash", "₱8,000", "Paid"));
-        transactionsData.add(new TransactionRowData("2:28 PM", "Kyla Mae Reyes", "2023-0931", "OR-261005-124", "Card", "₱21,750", "Partial"));
-        transactionsData.add(new TransactionRowData("2:17 PM", "Noel P. Garcia", "2025-0114", "OR-261005-123", "Bank", "₱15,200", "Pending"));
+    private void loadTransactions() {
+        try {
+            transactionsData.clear();
+            for (PaymentRepository.PaymentRecord payment : paymentService.findRecent()) {
+                String status = switch (payment.status().toUpperCase(Locale.ROOT)) {
+                    case "VERIFIED" -> "Paid";
+                    case "PENDING" -> "Pending";
+                    case "VOIDED" -> "Voided";
+                    case "REJECTED" -> "Rejected";
+                    default -> payment.status();
+                };
+                LocalDate date = payment.paymentDate().toLocalDateTime().toLocalDate();
+                String timestamp = payment.paymentDate().toLocalDateTime()
+                        .format(DateTimeFormatter.ofPattern("MMM dd, yyyy h:mm a", Locale.US));
+                String[] programAndId = payment.programId().split(" · ", 2);
+                transactionsData.add(new TransactionRowData(timestamp, date, payment.studentName(),
+                        programAndId.length > 1 ? programAndId[1] : payment.programId(), payment.referenceNumber(),
+                        payment.paymentType(), formatAmount(payment.amount()), status));
+            }
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load cashier transactions from the database.",
+                    "Transaction Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JPanel createContent() {
@@ -231,10 +255,10 @@ public class CashierTransacFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Maria Santos");
+        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Cashier");
         userName.setFont(new Font("SansSerif", Font.BOLD, 12));
         userName.setForeground(TEXT);
-        JLabel userSub = new JLabel("Cashier - Counter 03");
+        JLabel userSub = new JLabel("Cashier");
         userSub.setFont(new Font("SansSerif", Font.PLAIN, 10));
         userSub.setForeground(MUTED);
         userText.add(userName);
@@ -270,7 +294,7 @@ public class CashierTransacFrame {
         filters.add(filterLabel);
         dateFilter = createFilterCombo(new String[]{"Date: All", "Date: Today"});
         methodFilter = createFilterCombo(new String[]{"Method: All", "Method: Cash", "Method: GCash", "Method: Card", "Method: Bank"});
-        statusFilter = createFilterCombo(new String[]{"Status: All", "Status: Paid", "Status: Partial", "Status: Pending", "Status: Voided"});
+        statusFilter = createFilterCombo(new String[]{"Status: All", "Status: Paid", "Status: Pending", "Status: Rejected", "Status: Voided"});
         filters.add(dateFilter); filters.add(methodFilter); filters.add(statusFilter);
         filterWrapper.add(filters, BorderLayout.WEST);
 
@@ -527,7 +551,8 @@ public class CashierTransacFrame {
                 String rowMethod = String.valueOf(entry.getValue(4));
                 String rowStatus = String.valueOf(entry.getValue(6));
                 boolean matchesSearch = search.isEmpty() || student.contains(search) || id.contains(search) || receipt.contains(search);
-                boolean matchesDate = !"Date: Today".equals(date) || !time.toLowerCase(Locale.ROOT).contains("yesterday");
+                boolean matchesDate = !"Date: Today".equals(date)
+                        || transactionsData.get(entry.getIdentifier()).paymentDate.equals(LocalDate.now());
                 boolean matchesMethod = "Method: All".equals(method) || method.endsWith(rowMethod);
                 boolean matchesStatus = "Status: All".equals(status) || status.endsWith(rowStatus);
                 if (!matchesSearch || !matchesDate || !matchesMethod || !matchesStatus) return false;
@@ -567,6 +592,7 @@ public class CashierTransacFrame {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem view = new JMenuItem("View Receipt");
         JMenuItem voidItem = new JMenuItem("Void Transaction");
+        voidItem.setEnabled("Paid".equals(transaction.status));
         view.addActionListener(action -> showReceipt(transaction));
         voidItem.addActionListener(action -> voidTransaction(transaction));
         menu.add(view);
@@ -593,11 +619,26 @@ public class CashierTransacFrame {
                 "Void transaction " + transaction.receiptNo + "? This requires cashier override.",
                 "Void Transaction", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (choice == JOptionPane.YES_OPTION) {
-            transaction.status = "Voided";
-            int modelRow = transactionsData.indexOf(transaction);
-            transactionModel.setValueAt("Voided", modelRow, 6);
-            rebuildTransactionFilter();
-            JOptionPane.showMessageDialog(window, "Transaction marked as Voided.", "Transaction Updated", JOptionPane.INFORMATION_MESSAGE);
+            try {
+                paymentService.voidVerifiedPayment(transaction.receiptNo);
+                loadTransactions();
+                refreshTransactionModel();
+                rebuildTransactionFilter();
+                JOptionPane.showMessageDialog(window, "Transaction voided in the database.",
+                        "Transaction Updated", JOptionPane.INFORMATION_MESSAGE);
+            } catch (SQLException | SecurityException exception) {
+                JOptionPane.showMessageDialog(window, "Unable to void this payment in the database.",
+                        "Transaction Update Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void refreshTransactionModel() {
+        if (transactionModel == null) return;
+        transactionModel.setRowCount(0);
+        for (TransactionRowData data : transactionsData) {
+            transactionModel.addRow(new Object[]{data.time, data.studentName, data.studentId, data.receiptNo,
+                    data.method, data.amount, data.status, "..."});
         }
     }
 
@@ -621,6 +662,10 @@ public class CashierTransacFrame {
 
     private String csv(String value) {
         return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
+    private String formatAmount(double amount) {
+        return String.format(Locale.US, "₱ %,.2f", amount);
     }
 
     private JPanel createDropdownFilter(String text) {
@@ -661,6 +706,7 @@ public class CashierTransacFrame {
 
     private static class TransactionRowData {
         String time;
+        LocalDate paymentDate;
         String studentName;
         String studentId;
         String receiptNo;
@@ -668,8 +714,10 @@ public class CashierTransacFrame {
         String amount;
         String status;
 
-        TransactionRowData(String time, String studentName, String studentId, String receiptNo, String method, String amount, String status) {
+        TransactionRowData(String time, LocalDate paymentDate, String studentName, String studentId,
+                           String receiptNo, String method, String amount, String status) {
             this.time = time;
+            this.paymentDate = paymentDate;
             this.studentName = studentName;
             this.studentId = studentId;
             this.receiptNo = receiptNo;

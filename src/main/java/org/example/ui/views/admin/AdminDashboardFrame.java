@@ -356,7 +356,7 @@ public class AdminDashboardFrame {
         // Recent Validations Queue
         gbc.gridy = 0;
         gbc.insets = new Insets(0, 0, 15, 0);
-        left.add(createSectionHeader("Recent Validations Queue", "View Full Queue \u2192"), gbc);
+        left.add(createSectionHeader("Student Enrollment Overview", "View Full Queue \u2192"), gbc);
 
         gbc.gridy = 1;
         gbc.insets = new Insets(0, 0, 30, 0);

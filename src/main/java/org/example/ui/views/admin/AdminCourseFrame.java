@@ -48,16 +48,23 @@ public class AdminCourseFrame extends JFrame {
     }
 
     private void initializeCourses() {
+        initializeCourses(null);
+    }
+
+    private void initializeCourses(String selectedCode) {
+        courses.clear();
         try {
             for (Course course : courseRepository.findAll()) {
-                courses.add(new CourseData(course.getCode(), course.getTitle(), course.getUnits(), "", ""));
+                courses.add(new CourseData(course.getCode(), course.getTitle(), course.getUnits(),
+                        course.getDepartment(), courseRepository.findSchedulesByCourseCode(course.getCode())));
             }
         } catch (java.sql.SQLException exception) {
             JOptionPane.showMessageDialog(this, "Unable to load courses from the database.", "Course Error", JOptionPane.ERROR_MESSAGE);
         }
-        if (!courses.isEmpty()) {
-            selectedCourse = courses.get(0);
-        }
+        selectedCourse = courses.stream()
+                .filter(course -> course.code.equals(selectedCode))
+                .findFirst()
+                .orElse(courses.isEmpty() ? null : courses.get(0));
     }
 
     private JPanel createSidebar() {
@@ -169,11 +176,8 @@ public class AdminCourseFrame extends JFrame {
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         btnPanel.setBackground(Color.WHITE);
 
-        JButton addSection = createPrimaryButton("+ Add Section", BRAND_GREEN, Color.WHITE, BRAND_GREEN);
-        addSection.addActionListener(event -> showSectionDialog(null));
         JButton addCourse = createPrimaryButton("+ Add Course", Color.WHITE, BRAND_GREEN, BRAND_GREEN);
         addCourse.addActionListener(event -> showCourseDialog(null));
-        btnPanel.add(addSection);
         btnPanel.add(addCourse);
         header.add(btnPanel, BorderLayout.EAST);
 
@@ -247,6 +251,12 @@ public class AdminCourseFrame extends JFrame {
     private void refreshCatalog() {
         if (catalogListPanel == null) return;
         catalogListPanel.removeAll();
+        if (courses.isEmpty()) {
+            catalogListPanel.add(new JLabel("No course records found."));
+            catalogListPanel.revalidate();
+            catalogListPanel.repaint();
+            return;
+        }
         String query = courseSearchField == null ? "" : courseSearchField.getText().trim().toLowerCase();
         if (query.equals("search course code or title...")) query = "";
         for (CourseData course : courses) {
@@ -260,7 +270,7 @@ public class AdminCourseFrame extends JFrame {
     }
 
     private JPanel createDynamicCourseCard(CourseData course, boolean active) {
-        JPanel card = createCourseCard(course.code, course.title, course.sections.size() + " Secs", active);
+        JPanel card = createCourseCard(course.code, course.title, course.schedules.size() + " Schedules", active);
         addClickListener(card, new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent event) {
@@ -326,26 +336,49 @@ public class AdminCourseFrame extends JFrame {
     }
 
     private void refreshSectionDetails() {
-        if (sectionsPanel == null || selectedCourse == null) return;
-        selectedCourseTitle.setText(selectedCourse.code + " — " + selectedCourse.title);
-        selectedCourseSubtitle.setText(selectedCourse.units + " Units | " + selectedCourse.department + " Dept | Term: " + selectedCourse.term);
-        activeSectionsTitle.setText("Active Sections (" + selectedCourse.sections.size() + ")");
+        if (sectionsPanel == null) return;
         sectionsPanel.removeAll();
-        for (SectionData section : selectedCourse.sections) {
-            sectionsPanel.add(createDynamicSectionCard(selectedCourse, section));
+        if (selectedCourse == null) {
+            selectedCourseTitle.setText("No course selected");
+            selectedCourseSubtitle.setText("");
+            activeSectionsTitle.setText("Schedules");
+            sectionsPanel.add(new JLabel("No course records found."));
+            sectionsPanel.revalidate();
+            sectionsPanel.repaint();
+            return;
+        }
+        selectedCourseTitle.setText(selectedCourse.code + " — " + selectedCourse.title);
+        selectedCourseSubtitle.setText(selectedCourse.units + " Units | "
+                + (selectedCourse.department == null ? "" : selectedCourse.department) + " Dept");
+        activeSectionsTitle.setText("Schedules (" + selectedCourse.schedules.size() + ")");
+        if (selectedCourse.schedules.isEmpty()) {
+            sectionsPanel.add(new JLabel("No schedule records are available for this course."));
+        }
+        for (CourseRepository.CourseSchedule schedule : selectedCourse.schedules) {
+            sectionsPanel.add(createDynamicScheduleCard(schedule));
             sectionsPanel.add(Box.createVerticalStrut(15));
         }
         sectionsPanel.revalidate();
         sectionsPanel.repaint();
     }
 
-    private JPanel createDynamicSectionCard(CourseData course, SectionData section) {
-        JPanel card = createSectionCard(section.name, section.isFull() ? "FULL" : "OPEN", section.schedule,
-                section.room, section.instructor, section.enrolled, section.capacity);
-        JButton edit = findButton(card, "Edit");
-        JButton students = findButton(card, "Students");
-        if (edit != null) edit.addActionListener(event -> showSectionDialog(section));
-        if (students != null) students.addActionListener(event -> showStudentsDialog(section));
+    private JPanel createDynamicScheduleCard(CourseRepository.CourseSchedule schedule) {
+        RoundedPanel card = new RoundedPanel(15, BG_LIGHT, BORDER_COLOR);
+        card.setLayout(new GridLayout(3, 1, 0, 5));
+        card.setBorder(new EmptyBorder(15, 20, 15, 20));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
+        JLabel day = new JLabel(schedule.dayOfWeek());
+        day.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        day.setForeground(TEXT_DARK);
+        JLabel time = new JLabel("Schedule: " + schedule.startTime() + " - " + schedule.endTime());
+        time.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        time.setForeground(TEXT_MUTED);
+        JLabel details = new JLabel("Room: " + schedule.room() + " | Instructor: " + schedule.instructor());
+        details.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        details.setForeground(TEXT_MUTED);
+        card.add(day);
+        card.add(time);
+        card.add(details);
         return card;
     }
 
@@ -361,41 +394,7 @@ public class AdminCourseFrame extends JFrame {
     }
 
     private JPanel createCourseCatalog() {
-        JPanel catalog = new JPanel(new BorderLayout(0, 15));
-        catalog.setBackground(Color.WHITE);
-        catalog.setPreferredSize(new Dimension(320, 0));
-
-        JLabel title = new JLabel("Course Catalog");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 16));
-        catalog.add(title, BorderLayout.NORTH);
-
-        JPanel listPanel = new JPanel();
-        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
-        listPanel.setBackground(Color.WHITE);
-
-        // Search Box (Mockup)
-        RoundedPanel searchBox = new RoundedPanel(10, BG_LIGHT, BORDER_COLOR);
-        searchBox.setLayout(new BorderLayout());
-        searchBox.setBorder(new EmptyBorder(10, 15, 10, 15));
-        searchBox.setMaximumSize(new Dimension(320, 40));
-        JLabel searchLbl = new JLabel("Search course code or title...");
-        searchLbl.setForeground(TEXT_MUTED);
-        searchBox.add(searchLbl, BorderLayout.WEST);
-
-        listPanel.add(searchBox);
-        listPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
-        // Course Cards
-        listPanel.add(createCourseCard("DBMS 101", "Database Management Systems", "4 Secs", true));
-        listPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-        listPanel.add(createCourseCard("OOP 202", "Object-Oriented Programming", "3 Secs", false));
-        listPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-        listPanel.add(createCourseCard("OS 301", "Operating Systems", "2 Secs", false));
-        listPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-        listPanel.add(createCourseCard("ACC 101", "Fundamentals of Accounting", "5 Secs", false));
-
-        catalog.add(listPanel, BorderLayout.CENTER);
-        return catalog;
+        return createDynamicCourseCatalog();
     }
 
     private JPanel createCourseCard(String code, String name, String secs, boolean active) {
@@ -437,162 +436,7 @@ public class AdminCourseFrame extends JFrame {
     }
 
     private JPanel createSectionDetails() {
-        JPanel details = new JPanel(new BorderLayout(0, 20));
-        details.setBackground(Color.WHITE);
-
-        // Header
-        JPanel headerPanel = new JPanel(new BorderLayout());
-        headerPanel.setBackground(Color.WHITE);
-
-        JPanel titlePanel = new JPanel(new GridLayout(2, 1, 0, 5));
-        titlePanel.setBackground(Color.WHITE);
-
-        JLabel title = new JLabel("DBMS 101 — Database Management Systems");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 20));
-        title.setForeground(TEXT_DARK);
-
-        JLabel subTitle = new JLabel("3 Units | Computer Science Dept | Term: 1st Sem 2026-2027");
-        subTitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        subTitle.setForeground(TEXT_MUTED);
-
-        titlePanel.add(title);
-        titlePanel.add(subTitle);
-
-        JLabel editBtn = new JLabel("Edit Course");
-        editBtn.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        editBtn.setForeground(BRAND_GREEN);
-        editBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        headerPanel.add(titlePanel, BorderLayout.CENTER);
-        headerPanel.add(editBtn, BorderLayout.EAST);
-
-        // Active Sections List
-        JPanel listContainer = new JPanel(new BorderLayout(0, 15));
-        listContainer.setBackground(Color.WHITE);
-
-        JLabel listTitle = new JLabel("Active Sections (4)");
-        listTitle.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        listTitle.setForeground(TEXT_DARK);
-        listContainer.add(listTitle, BorderLayout.NORTH);
-
-        JPanel sectionsPanel = new JPanel();
-        sectionsPanel.setLayout(new BoxLayout(sectionsPanel, BoxLayout.Y_AXIS));
-        sectionsPanel.setBackground(Color.WHITE);
-
-        sectionsPanel.add(createSectionCard("Section A (DBMS101-A)", "OPEN", "MWF 08:00 AM - 09:30 AM", "Lab 3", "Prof. M. Santos", 42, 45));
-        sectionsPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-        sectionsPanel.add(createSectionCard("Section B (DBMS101-B)", "FULL", "TTH 10:00 AM - 11:30 AM", "Lab 2", "Prof. R. Reyes", 45, 45));
-        sectionsPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-        sectionsPanel.add(createSectionCard("Section C (DBMS101-C)", "OPEN", "MWF 01:00 PM - 02:30 PM", "Rm 204", "Prof. M. Santos", 28, 45));
-        sectionsPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-        sectionsPanel.add(createSectionCard("Section D (DBMS101-D)", "OPEN", "SAT 09:00 AM - 12:00 PM", "Lab 1", "Prof. J. Cruz", 15, 45));
-
-        JScrollPane scrollPane = new JScrollPane(sectionsPanel);
-        scrollPane.setBorder(null);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-
-        listContainer.add(scrollPane, BorderLayout.CENTER);
-
-        details.add(headerPanel, BorderLayout.NORTH);
-        details.add(listContainer, BorderLayout.CENTER);
-
-        return details;
-    }
-
-    private JPanel createSectionCard(String secName, String status, String sched, String room, String instructor, int current, int max) {
-        RoundedPanel card = new RoundedPanel(15, BG_LIGHT, BORDER_COLOR);
-        card.setLayout(new GridBagLayout());
-        card.setBorder(new EmptyBorder(15, 20, 15, 20));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 1.0;
-
-        // Row 1: Title and Status
-        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
-        topRow.setOpaque(false);
-        JLabel lblTitle = new JLabel(secName);
-        lblTitle.setFont(new Font("Segoe UI", Font.BOLD, 15));
-        lblTitle.setForeground(TEXT_DARK);
-
-        boolean isOpen = status.equals("OPEN");
-        Color badgeBg = isOpen ? new Color(214, 245, 226) : new Color(253, 216, 216);
-        Color badgeFg = isOpen ? new Color(15, 110, 50) : new Color(180, 20, 20);
-
-        RoundedPanel badge = new RoundedPanel(15, badgeBg, new Color(0,0,0,0));
-        badge.setBorder(new EmptyBorder(3, 10, 3, 10));
-        JLabel lblStatus = new JLabel(status);
-        lblStatus.setFont(new Font("Segoe UI", Font.BOLD, 10));
-        lblStatus.setForeground(badgeFg);
-        badge.add(lblStatus);
-
-        topRow.add(lblTitle);
-        topRow.add(badge);
-
-        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
-        card.add(topRow, gbc);
-
-        // Row 2 & 3: Details (Sched, Room, Instructor)
-        JPanel detailsPanel = new JPanel(new GridLayout(2, 1, 0, 5));
-        detailsPanel.setOpaque(false);
-        detailsPanel.setBorder(new EmptyBorder(10, 0, 10, 0));
-
-        JLabel lblSched = new JLabel("Sched: " + sched);
-        lblSched.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        lblSched.setForeground(TEXT_MUTED);
-
-        JLabel lblRoomInst = new JLabel("Room: " + room + " | Instructor: " + instructor);
-        lblRoomInst.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        lblRoomInst.setForeground(TEXT_MUTED);
-
-        detailsPanel.add(lblSched);
-        detailsPanel.add(lblRoomInst);
-
-        gbc.gridy = 1;
-        card.add(detailsPanel, gbc);
-
-        // Right side: Action Buttons
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 0));
-        actionPanel.setOpaque(false);
-
-        JButton btnEdit = createLinkButton("Edit");
-        JButton btnStudents = createLinkButton("Students");
-
-        actionPanel.add(btnEdit);
-        actionPanel.add(btnStudents);
-
-        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 0;
-        card.add(actionPanel, gbc);
-
-        // Row 4: Capacity & Progress Bar
-        JPanel capacityPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
-        capacityPanel.setOpaque(false);
-
-        JLabel lblCap = new JLabel("Capacity: " + current + " / " + max);
-        lblCap.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        lblCap.setForeground(TEXT_MUTED);
-
-        ProgressBar bar = new ProgressBar(current, max, isOpen ? BRAND_GREEN : new Color(230, 60, 60));
-
-        capacityPanel.add(lblCap);
-        capacityPanel.add(bar);
-
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.weightx = 1.0;
-        card.add(capacityPanel, gbc);
-
-        return card;
-    }
-
-    private JButton createLinkButton(String text) {
-        JButton button = new JButton(text);
-        button.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        button.setForeground(BRAND_GREEN);
-        button.setContentAreaFilled(false);
-        button.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BRAND_GREEN));
-        button.setFocusPainted(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        return button;
+        return createDynamicSectionDetails();
     }
 
     private JButton createPrimaryButton(String text, Color bg, Color fg, Color border) {
@@ -612,13 +456,11 @@ public class AdminCourseFrame extends JFrame {
         JTextField title = new JTextField(course == null ? "" : course.title);
         JTextField units = new JTextField(course == null ? "3" : String.valueOf(course.units));
         JTextField department = new JTextField(course == null ? "" : course.department);
-        JTextField term = new JTextField(course == null ? "1st Sem 2026-2027" : course.term);
-        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
+        JPanel form = new JPanel(new GridLayout(4, 2, 8, 8));
         form.add(new JLabel("Code:")); form.add(code);
         form.add(new JLabel("Title:")); form.add(title);
         form.add(new JLabel("Units:")); form.add(units);
         form.add(new JLabel("Department:")); form.add(department);
-        form.add(new JLabel("Term:")); form.add(term);
         int result = JOptionPane.showConfirmDialog(this, form, course == null ? "Add Course" : "Edit Course",
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if (result != JOptionPane.OK_OPTION) return;
@@ -626,81 +468,23 @@ public class AdminCourseFrame extends JFrame {
             int unitCount = Integer.parseInt(units.getText().trim());
             if (code.getText().trim().isEmpty() || title.getText().trim().isEmpty() || unitCount <= 0) throw new IllegalArgumentException();
             if (course == null) {
-                CourseData newCourse = new CourseData(code.getText().trim(), title.getText().trim(), unitCount,
-                        department.getText().trim(), term.getText().trim());
-                courseRepository.create(new Course(newCourse.code, newCourse.title, newCourse.units), newCourse.department);
-                courses.add(newCourse);
-                selectedCourse = newCourse;
+                courseRepository.create(new Course(code.getText().trim(), title.getText().trim(), unitCount,
+                        department.getText().trim()), department.getText().trim());
             } else {
-                String oldCode = course.code;
-                course.code = code.getText().trim();
-                course.title = title.getText().trim();
-                course.units = unitCount;
-                course.department = department.getText().trim();
-                course.term = term.getText().trim();
-                courseRepository.update(oldCode, new Course(course.code, course.title, course.units), course.department);
+                courseRepository.update(course.code,
+                        new Course(code.getText().trim(), title.getText().trim(), unitCount, department.getText().trim()),
+                        department.getText().trim());
             }
-            refreshCatalog();
-            refreshSectionDetails();
-        } catch (IllegalArgumentException | java.sql.SQLException exception) {
-            JOptionPane.showMessageDialog(this, "Please enter valid course details and units.", "Invalid Course", JOptionPane.WARNING_MESSAGE);
-        }
-    }
-
-    private void showSectionDialog(SectionData section) {
-        if (selectedCourse == null) return;
-        JTextField name = new JTextField(section == null ? "" : section.name);
-        JTextField schedule = new JTextField(section == null ? "" : section.schedule);
-        JTextField room = new JTextField(section == null ? "" : section.room);
-        JTextField instructor = new JTextField(section == null ? "" : section.instructor);
-        JTextField capacity = new JTextField(section == null ? "45" : String.valueOf(section.capacity));
-        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
-        form.add(new JLabel("Section Name:")); form.add(name);
-        form.add(new JLabel("Schedule:")); form.add(schedule);
-        form.add(new JLabel("Room:")); form.add(room);
-        form.add(new JLabel("Instructor:")); form.add(instructor);
-        form.add(new JLabel("Max Capacity:")); form.add(capacity);
-        int result = JOptionPane.showConfirmDialog(this, form, section == null ? "Add Section" : "Edit Section",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (result != JOptionPane.OK_OPTION) return;
-        try {
-            int max = Integer.parseInt(capacity.getText().trim());
-            if (name.getText().trim().isEmpty() || max <= 0) throw new IllegalArgumentException();
-            if (section == null) {
-                selectedCourse.sections.add(new SectionData(name.getText().trim(), schedule.getText().trim(),
-                        room.getText().trim(), instructor.getText().trim(), 0, max));
-            } else {
-                section.name = name.getText().trim();
-                section.schedule = schedule.getText().trim();
-                section.room = room.getText().trim();
-                section.instructor = instructor.getText().trim();
-                section.capacity = max;
-            }
+            initializeCourses(code.getText().trim());
             refreshCatalog();
             refreshSectionDetails();
         } catch (IllegalArgumentException exception) {
-            JOptionPane.showMessageDialog(this, "Please enter valid section details and capacity.", "Invalid Section", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Please enter valid course details and units.",
+                    "Invalid Course", JOptionPane.WARNING_MESSAGE);
+        } catch (java.sql.SQLException exception) {
+            JOptionPane.showMessageDialog(this, "Unable to save the course to the database.",
+                    "Course Error", JOptionPane.ERROR_MESSAGE);
         }
-    }
-
-    private void showStudentsDialog(SectionData section) {
-        String[] columns = {"STUDENT ID", "FULL NAME", "PROGRAM"};
-        Object[][] students = {
-                {"2025-0011", "Justine Rivera", "BS Information Technology"},
-                {"2025-0012", "Mark Mendoza", "BS Civil Engineering"},
-                {"2025-0013", "Prince Cariaga", "BS Information Technology"}
-        };
-        int count = Math.min(section.enrolled, students.length);
-        Object[][] visibleStudents = new Object[count][3];
-        System.arraycopy(students, 0, visibleStudents, 0, count);
-        JTable table = new JTable(new javax.swing.table.DefaultTableModel(visibleStudents, columns) {
-            public boolean isCellEditable(int row, int column) { return false; }
-        });
-        table.setRowHeight(30);
-        table.setFillsViewportHeight(true);
-        JScrollPane scroll = new JScrollPane(table);
-        scroll.setPreferredSize(new Dimension(480, 180));
-        JOptionPane.showMessageDialog(this, scroll, "Students - " + section.name, JOptionPane.INFORMATION_MESSAGE);
     }
 
     private static class CourseData {
@@ -708,36 +492,16 @@ public class AdminCourseFrame extends JFrame {
         private String title;
         private int units;
         private String department;
-        private String term;
-        private final List<SectionData> sections = new ArrayList<>();
+        private final List<CourseRepository.CourseSchedule> schedules;
 
-        CourseData(String code, String title, int units, String department, String term) {
+        CourseData(String code, String title, int units, String department,
+                   List<CourseRepository.CourseSchedule> schedules) {
             this.code = code;
             this.title = title;
             this.units = units;
             this.department = department;
-            this.term = term;
+            this.schedules = new ArrayList<>(schedules);
         }
-    }
-
-    private static class SectionData {
-        private String name;
-        private String schedule;
-        private String room;
-        private String instructor;
-        private int enrolled;
-        private int capacity;
-
-        SectionData(String name, String schedule, String room, String instructor, int enrolled, int capacity) {
-            this.name = name;
-            this.schedule = schedule;
-            this.room = room;
-            this.instructor = instructor;
-            this.enrolled = enrolled;
-            this.capacity = capacity;
-        }
-
-        boolean isFull() { return enrolled >= capacity; }
     }
 
     // --- Custom UI Components ---

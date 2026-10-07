@@ -14,10 +14,12 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
 
 public class CashierCollectFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -42,14 +44,13 @@ public class CashierCollectFrame {
     private JButton selectedPaymentBtn;
     private final List<CollectStudent> students = new ArrayList<>();
     private CollectStudent selectedStudent;
-    private double selectedBalanceAmount = 18250;
+    private double selectedBalanceAmount;
     private ButtonGroup balanceGroup;
     private JPanel balancesPanel;
     private JLabel cashTenderedTitle;
     private JLabel referenceTitle;
     private JTextField referenceField;
     private String selectedPaymentMethod = "Cash";
-    private static final AtomicInteger RECEIPT_SEQUENCE = new AtomicInteger(8800);
 
     public CashierCollectFrame() {
         this(null);
@@ -70,7 +71,7 @@ public class CashierCollectFrame {
         try {
             for (PaymentRepository.PaymentStudent student : paymentService.findStudentsWithBalances()) {
                 students.add(new CollectStudent(student.studentId(), student.name(), student.program(),
-                        student.tuitionBalance(), 0));
+                        student.tuitionBalance()));
             }
             if (!students.isEmpty()) {
                 selectedStudent = students.get(0);
@@ -333,9 +334,8 @@ public class CashierCollectFrame {
         if (balancesPanel == null || selectedStudent == null) return;
         balancesPanel.removeAll();
         balanceGroup = new ButtonGroup();
-        balancesPanel.add(createSelectableBalanceRow("Tuition Fee - 1st Semester", "Due: Oct 10, 2026", selectedStudent.tuitionBalance, true));
-        balancesPanel.add(Box.createVerticalStrut(10));
-        balancesPanel.add(createSelectableBalanceRow("Miscellaneous Fees", "Due: Nov 15, 2026", selectedStudent.miscellaneousBalance, false));
+        balancesPanel.add(createSelectableBalanceRow("Enrolled-course tuition", "Balance from enrollments and verified payments",
+                selectedStudent.tuitionBalance, true));
         balancesPanel.revalidate();
         balancesPanel.repaint();
         selectBalance(selectedStudent.tuitionBalance);
@@ -624,15 +624,27 @@ public class CashierCollectFrame {
         }
 
         double paidAmount = selectedBalanceAmount;
-        String orNumber = "OR-2026-" + RECEIPT_SEQUENCE.incrementAndGet();
+        String orNumber = "Cash".equals(selectedPaymentMethod)
+                ? "OR-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"))
+                    + "-" + UUID.randomUUID().toString().substring(0, 8)
+                : referenceField.getText().trim();
         try {
             paymentService.record(selectedStudent.id, paidAmount, selectedPaymentMethod, orNumber);
         } catch (SQLException | IllegalArgumentException | SecurityException exception) {
             JOptionPane.showMessageDialog(window, "Unable to save the payment.", "Payment Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        if (selectedStudent.tuitionBalance == selectedBalanceAmount) selectedStudent.tuitionBalance = 0;
-        else selectedStudent.miscellaneousBalance = 0;
+        String studentId = selectedStudent.id;
+        try {
+            students.clear();
+            for (PaymentRepository.PaymentStudent student : paymentService.findStudentsWithBalances()) {
+                students.add(new CollectStudent(student.studentId(), student.name(), student.program(), student.tuitionBalance()));
+            }
+            selectedStudent = students.stream().filter(student -> student.id.equals(studentId)).findFirst().orElse(selectedStudent);
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Payment was saved, but the updated balance could not be reloaded.",
+                    "Payment Refresh Error", JOptionPane.ERROR_MESSAGE);
+        }
         refreshStudentBalances();
         showReceiptPreview(orNumber, paidAmount);
     }
@@ -713,14 +725,12 @@ public class CashierCollectFrame {
         final String name;
         final String program;
         double tuitionBalance;
-        double miscellaneousBalance;
 
-        CollectStudent(String id, String name, String program, double tuitionBalance, double miscellaneousBalance) {
+        CollectStudent(String id, String name, String program, double tuitionBalance) {
             this.id = id;
             this.name = name;
             this.program = program;
             this.tuitionBalance = tuitionBalance;
-            this.miscellaneousBalance = miscellaneousBalance;
         }
     }
 
