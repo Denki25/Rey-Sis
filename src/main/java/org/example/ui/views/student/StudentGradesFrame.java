@@ -1,6 +1,7 @@
 package org.example.ui.views.student;
 
 import org.example.model.Student;
+import org.example.model.GradeRecord;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -41,6 +42,7 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashSet;
 
 public class StudentGradesFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -62,7 +64,7 @@ public class StudentGradesFrame {
 
     public StudentGradesFrame(Student student) {
         this.student = student;
-        initMockGrades();
+        initDatabaseGrades();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
@@ -75,14 +77,14 @@ public class StudentGradesFrame {
         window.setVisible(true);
     }
 
-    private void initMockGrades() {
-        gradesData.add(new GradeRowData("1", "COMSCI 3100", "Algorithms and Complexity", 3, "1.25", "92.15", "Passed", "Waiting For Approval", "1st Semester : 2026-2027"));
-        gradesData.add(new GradeRowData("2", "COMSCI 3101", "Database Management Systems", 3, "1.00", "95.60", "Passed", "Final Grade", "1st Semester : 2026-2027"));
-        gradesData.add(new GradeRowData("3", "INTECH 3100", "Systems Integration", 3, "1.25", "93.45", "Passed", "Waiting For Approval", "1st Semester : 2026-2027"));
-        gradesData.add(new GradeRowData("4", "MATH 1030", "Applied Statistics", 3, "1.50", "92.10", "Passed", "Final Grade", "1st Semester : 2026-2027"));
-        gradesData.add(new GradeRowData("5", "COMSCI 3110", "Software Engineering", 3, "1.75", "91.05", "Passed", "Final Grade", "1st Semester : 2026-2027"));
-        gradesData.add(new GradeRowData("1", "COMSCI 2100", "Object-Oriented Programming", 3, "1.50", "90.25", "Passed", "Final Grade", "2nd Semester : 2025-2026"));
-        gradesData.add(new GradeRowData("2", "MATH 1013", "Discrete Mathematics", 3, "1.75", "88.40", "Passed", "Final Grade", "2nd Semester : 2025-2026"));
+    private void initDatabaseGrades() {
+        int number = 1;
+        for (GradeRecord grade : student.getGrades()) {
+            String semester = grade.semester() + " : " + grade.academicYear();
+            gradesData.add(new GradeRowData(String.valueOf(number++), grade.course().getCode(),
+                    grade.course().getTitle(), grade.course().getUnits(), String.format("%.2f", grade.grade()), "",
+                    grade.remarks() == null ? "Recorded" : grade.remarks(), "Recorded", semester));
+        }
     }
 
     private JPanel createContent() {
@@ -267,10 +269,10 @@ public class StudentGradesFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(student != null ? student.getName() : "Justine Rivera");
+        JLabel userName = new JLabel(student == null ? "" : student.getName());
         userName.setFont(new Font("SansSerif", Font.BOLD, 12));
         userName.setForeground(TEXT);
-        JLabel userSub = new JLabel(student != null ? student.getProgram() + " · " + student.getStudentId() : "BSIT · 2025-0011");
+        JLabel userSub = new JLabel(student == null ? "" : student.getProgram() + " · " + student.getStudentId());
         userSub.setFont(new Font("SansSerif", Font.PLAIN, 10));
         userSub.setForeground(MUTED);
         userText.add(userName);
@@ -324,7 +326,7 @@ public class StudentGradesFrame {
         titleText.add(goldLine);
         titlePanel.add(titleText, BorderLayout.WEST);
 
-        String[] semesters = {"1st Semester : 2026-2027", "2nd Semester : 2025-2026"};
+        String[] semesters = semesterOptions();
         JComboBox<String> semesterCombo = new JComboBox<>(semesters);
         semesterCombo.setFont(new Font("SansSerif", Font.PLAIN, 12));
         semesterCombo.setForeground(TEXT);
@@ -344,6 +346,8 @@ public class StudentGradesFrame {
         tablesAndSummary.add(createGradesTableCardFixed(semesterCombo));
         tablesAndSummary.add(Box.createVerticalStrut(20));
         tablesAndSummary.add(createAcademicSummaryCard());
+        tablesAndSummary.add(Box.createVerticalStrut(20));
+        tablesAndSummary.add(createPerformanceChart());
 
         contentWrapper.add(tablesAndSummary, BorderLayout.CENTER);
 
@@ -351,6 +355,14 @@ public class StudentGradesFrame {
         body.add(contentWrapper);
 
         return body;
+    }
+
+    private String[] semesterOptions() {
+        LinkedHashSet<String> semesters = new LinkedHashSet<>();
+        for (GradeRowData grade : gradesData) {
+            semesters.add(grade.semester);
+        }
+        return semesters.isEmpty() ? new String[]{"No grades available"} : semesters.toArray(String[]::new);
     }
 
     private JPanel createProfileBanner() {
@@ -389,19 +401,19 @@ public class StudentGradesFrame {
         textGroup.setOpaque(false);
         textGroup.setLayout(new BoxLayout(textGroup, BoxLayout.Y_AXIS));
 
-        JLabel name = new JLabel(student != null ? student.getName() : "Justine Rivera");
+        JLabel name = new JLabel(student == null ? "" : student.getName());
         name.setFont(new Font("SansSerif", Font.BOLD, 22));
         name.setForeground(DEEP_GREEN);
 
-        JLabel id = new JLabel(student != null ? student.getStudentId() : "2025-0011");
+        JLabel id = new JLabel(student == null ? "" : student.getStudentId());
         id.setFont(new Font("SansSerif", Font.PLAIN, 12));
         id.setForeground(TEXT);
 
-        JLabel prog = new JLabel(student != null ? student.getProgram() : "BS Information Technology");
+        JLabel prog = new JLabel(student == null ? "" : student.getProgram());
         prog.setFont(new Font("SansSerif", Font.PLAIN, 12));
         prog.setForeground(TEXT);
 
-        JLabel year = new JLabel("3rd Year");
+        JLabel year = new JLabel(student == null ? "" : student.getYearLevel());
         year.setFont(new Font("SansSerif", Font.BOLD, 12));
         year.setForeground(DEEP_GREEN);
 
@@ -423,11 +435,11 @@ public class StudentGradesFrame {
         JPanel contactGroup = new JPanel();
         contactGroup.setOpaque(false);
         contactGroup.setLayout(new BoxLayout(contactGroup, BoxLayout.Y_AXIS));
-        contactGroup.add(createIconTextRow(VectorIcon.Type.EMAIL, "justine.rivera@reyu.edu"));
+        contactGroup.add(createIconTextRow(VectorIcon.Type.EMAIL, student.getEmail()));
         contactGroup.add(Box.createVerticalStrut(8));
-        contactGroup.add(createIconTextRow(VectorIcon.Type.PHONE, "0917 123 4567"));
+        contactGroup.add(createIconTextRow(VectorIcon.Type.PHONE, student.getContactNumber()));
         contactGroup.add(Box.createVerticalStrut(8));
-        contactGroup.add(createIconTextRow(VectorIcon.Type.LOCATION, "San Isidro, City of REY"));
+        contactGroup.add(createIconTextRow(VectorIcon.Type.LOCATION, student.getAddress()));
         contactGroup.add(Box.createVerticalStrut(8));
         contactGroup.add(createIconTextRow(VectorIcon.Type.CALENDAR, "")); // Intentionally left blank as in image
 
@@ -538,13 +550,13 @@ public class StudentGradesFrame {
         JPanel titleGrp = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         titleGrp.setOpaque(false);
         titleGrp.add(new JLabel(new VectorIcon(VectorIcon.Type.BAR_CHART, MUTED)));
-        JLabel title = new JLabel(student != null ? student.getName() : "Justine Rivera");
+        JLabel title = new JLabel(student == null ? "" : student.getName());
         title.setFont(new Font("SansSerif", Font.BOLD, 18));
         title.setForeground(DEEP_GREEN);
         titleGrp.add(title);
         header.add(titleGrp, BorderLayout.WEST);
 
-        String[] semesters = {"1st Semester : 2026-2027", "2nd Semester : 2025-2026"};
+        String[] semesters = semesterOptions();
         JComboBox<String> semesterCombo = new JComboBox<>(semesters);
         semesterCombo.setFont(new Font("SansSerif", Font.PLAIN, 12));
         semesterCombo.setForeground(TEXT);
@@ -667,12 +679,62 @@ public class StudentGradesFrame {
         JPanel blocksPanel = new JPanel(new GridLayout(1, 4, 16, 0));
         blocksPanel.setOpaque(false);
 
-        blocksPanel.add(createSummaryBlock("Total Subjects", "5", SUMMARY_GREEN_BG));
-        blocksPanel.add(createSummaryBlock("GWA", "1.75", SUMMARY_GOLD_BG));
-        blocksPanel.add(createSummaryBlock("Earned Units", "15 / 18", SUMMARY_GREEN_BG));
-        blocksPanel.add(createSummaryBlock("Status", "Eligible", SUMMARY_GOLD_BG));
+        blocksPanel.add(createSummaryBlock("Total Subjects", String.valueOf(student.getGrades().size()), SUMMARY_GREEN_BG));
+        blocksPanel.add(createSummaryBlock("GWA", String.format("%.2f", student.getCurrentGpa()), SUMMARY_GOLD_BG));
+        blocksPanel.add(createSummaryBlock("Earned Units", student.getEnrolledUnits() + " / " + student.getMaximumUnits(), SUMMARY_GREEN_BG));
+        blocksPanel.add(createSummaryBlock("Status", student.getDeansListStanding(), SUMMARY_GOLD_BG));
 
         card.add(blocksPanel, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel createPerformanceChart() {
+        CardPanel card = new CardPanel(Color.WHITE);
+        card.setLayout(new BorderLayout(0, 12));
+        card.setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));
+        JLabel title = new JLabel("Performance by Course");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(DEEP_GREEN);
+        card.add(title, BorderLayout.NORTH);
+        JPanel chart = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                super.paintComponent(graphics);
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int left = 48;
+                int bottom = getHeight() - 30;
+                int top = 12;
+                int width = Math.max(1, getWidth() - left - 18);
+                int height = Math.max(1, bottom - top);
+                g.setColor(BORDER);
+                g.drawLine(left, top, left, bottom);
+                g.drawLine(left, bottom, left + width, bottom);
+                if (student.getGrades().isEmpty()) {
+                    g.setColor(MUTED);
+                    g.drawString("No grade records available", left + 12, top + 22);
+                } else {
+                    int slot = Math.max(1, width / student.getGrades().size());
+                    for (int index = 0; index < student.getGrades().size(); index++) {
+                        GradeRecord grade = student.getGrades().get(index);
+                        double normalized = Math.max(0, Math.min(1, (5.0 - grade.grade()) / 4.0));
+                        int barHeight = (int) (normalized * (height - 20));
+                        int barWidth = Math.max(12, slot - 14);
+                        int x = left + index * slot + 7;
+                        g.setColor(GOLD);
+                        g.fillRoundRect(x, bottom - barHeight, barWidth, barHeight, 8, 8);
+                        g.setColor(TEXT);
+                        String code = grade.course().getCode();
+                        g.drawString(code.length() > 9 ? code.substring(0, 9) : code, x, bottom + 16);
+                        g.drawString(String.format("%.2f", grade.grade()), x, bottom - barHeight - 4);
+                    }
+                }
+                g.dispose();
+            }
+        };
+        chart.setPreferredSize(new Dimension(0, 190));
+        chart.setBackground(Color.WHITE);
+        card.add(chart, BorderLayout.CENTER);
         return card;
     }
 

@@ -5,9 +5,15 @@ public final class ScheduleItem {
     private final String time;
     private final String room;
     private final String instructor;
+    private final String dayOfWeek;
 
     public ScheduleItem(Course course, String time, String room, String instructor) {
+        this(course, "", time, room, instructor);
+    }
+
+    public ScheduleItem(Course course, String dayOfWeek, String time, String room, String instructor) {
         this.course = course;
+        this.dayOfWeek = dayOfWeek;
         this.time = time;
         this.room = room;
         this.instructor = instructor;
@@ -17,4 +23,5 @@ public final class ScheduleItem {
     public String getTime() { return time; }
     public String getRoom() { return room; }
     public String getInstructor() { return instructor; }
+    public String getDayOfWeek() { return dayOfWeek; }
 }

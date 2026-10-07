@@ -1,5 +1,7 @@
 package org.example.ui.views.cashier;
 
+import org.example.data.PaymentRepository;
+import org.example.service.CashierPaymentService;
 import org.example.model.Cashier;
 import org.example.ui.LoginFrame;
 
@@ -11,6 +13,7 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -27,12 +30,13 @@ public class CashierCollectFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Collection & Payments");
     private final Cashier cashier;
+    private final CashierPaymentService paymentService = new CashierPaymentService();
 
     // Form fields matching wireframe
-    private final JLabel studentInfoLabel = new JLabel("2025-0011 | Justine Rivera");
-    private final JTextField amountTenderedField = new JTextField("₱ 20,000.00");
-    private final JLabel totalAmountDueLabel = new JLabel("₱ 18,250.00");
-    private final JLabel changeLabel = new JLabel("₱ 1,750.00");
+    private final JLabel studentInfoLabel = new JLabel("Select a student");
+    private final JTextField amountTenderedField = new JTextField();
+    private final JLabel totalAmountDueLabel = new JLabel("₱ 0.00");
+    private final JLabel changeLabel = new JLabel("₱ 0.00");
 
     // Payment method active tracking button reference
     private JButton selectedPaymentBtn;
@@ -63,10 +67,18 @@ public class CashierCollectFrame {
     }
 
     private void initMockStudents() {
-        students.add(new CollectStudent("2025-0011", "Justine Rivera", "BSIT", 18250, 4500));
-        students.add(new CollectStudent("2025-0042", "Maria Santos", "BSBA", 3200, 1800));
-        students.add(new CollectStudent("2025-0105", "Juan Dela Cruz", "BSCE", 15000, 2500));
-        selectedStudent = students.get(0);
+        try {
+            for (PaymentRepository.PaymentStudent student : paymentService.findStudentsWithBalances()) {
+                students.add(new CollectStudent(student.studentId(), student.name(), student.program(),
+                        student.tuitionBalance(), 0));
+            }
+            if (!students.isEmpty()) {
+                selectedStudent = students.get(0);
+            }
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load student billing records. Run the payments SQL migration first.",
+                    "Payment Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     public void showWindow() {
@@ -613,6 +625,12 @@ public class CashierCollectFrame {
 
         double paidAmount = selectedBalanceAmount;
         String orNumber = "OR-2026-" + RECEIPT_SEQUENCE.incrementAndGet();
+        try {
+            paymentService.record(selectedStudent.id, paidAmount, selectedPaymentMethod, orNumber);
+        } catch (SQLException | IllegalArgumentException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to save the payment.", "Payment Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         if (selectedStudent.tuitionBalance == selectedBalanceAmount) selectedStudent.tuitionBalance = 0;
         else selectedStudent.miscellaneousBalance = 0;
         refreshStudentBalances();

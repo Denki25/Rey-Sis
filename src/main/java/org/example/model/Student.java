@@ -17,19 +17,46 @@ public final class Student {
     private final List<ScheduleItem> schedule;
     private final List<Announcement> announcements;
     private final List<Task> tasks;
-    private String dateOfBirth = "September 18, 2003";
-    private String address = "San Fernando, Pampanga";
-    private String location = "San Fernando, Pampanga";
-    private String section = "BSIT 3-A";
-    private String academicStatus = "Regular Student";
-    private String curriculumYear = "2023 Curriculum";
-    private String adviser = "Prof. Maria L. Santos";
+    private final List<EnrollmentRecord> enrollments;
+    private final List<GradeRecord> grades;
+    private String dateOfBirth;
+    private String address;
+    private String location;
+    private final String section;
+    private final String academicStatus;
+    private final String curriculumYear;
+    private final String adviser;
     private String avatarPath;
+    private final String enrollmentSemester;
 
     public Student(String studentId, String name, String program, String yearLevel, String email,
                    String contactNumber, int enrolledSubjects, double currentGpa, int enrolledUnits,
                    int maximumUnits, String deansListStanding, List<ScheduleItem> schedule,
                    List<Announcement> announcements, List<Task> tasks) {
+        this(studentId, name, program, yearLevel, email, contactNumber, enrolledSubjects, currentGpa,
+                enrolledUnits, maximumUnits, deansListStanding, schedule, announcements, tasks,
+                null, null, null, null, null, null, null, null);
+    }
+
+    public Student(String studentId, String name, String program, String yearLevel, String email,
+                   String contactNumber, int enrolledSubjects, double currentGpa, int enrolledUnits,
+                   int maximumUnits, String deansListStanding, List<ScheduleItem> schedule,
+                   List<Announcement> announcements, List<Task> tasks, String dateOfBirth,
+                   String address, String section, String academicStatus, String curriculumYear,
+                   String adviser, String avatarPath, String enrollmentSemester) {
+        this(studentId, name, program, yearLevel, email, contactNumber, enrolledSubjects, currentGpa,
+                enrolledUnits, maximumUnits, deansListStanding, schedule, announcements, tasks,
+                dateOfBirth, address, section, academicStatus, curriculumYear, adviser, avatarPath,
+                enrollmentSemester, List.of(), List.of());
+    }
+
+    public Student(String studentId, String name, String program, String yearLevel, String email,
+                   String contactNumber, int enrolledSubjects, double currentGpa, int enrolledUnits,
+                   int maximumUnits, String deansListStanding, List<ScheduleItem> schedule,
+                   List<Announcement> announcements, List<Task> tasks, String dateOfBirth,
+                   String address, String section, String academicStatus, String curriculumYear,
+                   String adviser, String avatarPath, String enrollmentSemester,
+                   List<EnrollmentRecord> enrollments, List<GradeRecord> grades) {
         this.studentId = studentId;
         this.name = name;
         this.program = program;
@@ -44,6 +71,17 @@ public final class Student {
         this.schedule = List.copyOf(schedule);
         this.announcements = List.copyOf(announcements);
         this.tasks = List.copyOf(tasks);
+        this.dateOfBirth = dateOfBirth;
+        this.address = address;
+        this.location = address;
+        this.section = section;
+        this.academicStatus = academicStatus;
+        this.curriculumYear = curriculumYear;
+        this.adviser = adviser;
+        this.avatarPath = avatarPath;
+        this.enrollmentSemester = enrollmentSemester;
+        this.enrollments = List.copyOf(enrollments);
+        this.grades = List.copyOf(grades);
     }
 
     public String getStudentId() { return studentId; }
@@ -68,6 +106,9 @@ public final class Student {
     public String getCurriculumYear() { return curriculumYear; }
     public String getAdviser() { return adviser; }
     public String getAvatarPath() { return avatarPath; }
+    public String getEnrollmentSemester() { return enrollmentSemester; }
+    public List<EnrollmentRecord> getEnrollments() { return enrollments; }
+    public List<GradeRecord> getGrades() { return grades; }
 
     public void setDateOfBirth(String dateOfBirth) { this.dateOfBirth = dateOfBirth; }
     public void setName(String name) { this.name = name; }

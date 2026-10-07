@@ -1,6 +1,8 @@
 package org.example.ui.views.cashier;
 
 import org.example.model.Cashier;
+import org.example.data.PaymentRepository;
+import org.example.service.CashierPaymentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -41,6 +43,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -56,6 +59,7 @@ public class CashierDashboardFrame {
 
     private final JFrame window = new JFrame("REY SIS | Cashier Dashboard");
     private final Cashier cashier;
+    private final CashierPaymentService paymentService = new CashierPaymentService();
     private final List<PaymentRowData> paymentsData = new ArrayList<>();
     private DefaultTableModel paymentModel;
     private JTable paymentTable;
@@ -82,10 +86,15 @@ public class CashierDashboardFrame {
     }
 
     private void initMockPayments() {
-        paymentsData.add(new PaymentRowData("TRX-1001", "Justine Rivera", "BSIT · 2025-0011", "₱ 12,500.00", "Tuition Fee", "Verified", "Today, 10:45 AM"));
-        paymentsData.add(new PaymentRowData("TRX-1002", "Maria Santos", "BSBA · 2025-0042", "₱ 3,200.00", "Laboratory Fee", "Pending", "Today, 09:30 AM"));
-        paymentsData.add(new PaymentRowData("TRX-1003", "Juan Dela Cruz", "BSCE · 2025-0105", "₱ 15,000.00", "Tuition Fee", "Verified", "Yesterday"));
-        paymentsData.add(new PaymentRowData("TRX-1004", "Ana Reyes", "BSN · 2025-0211", "₱ 1,500.00", "Miscellaneous", "Verified", "Yesterday"));
+        try {
+            for (PaymentRepository.PaymentRecord payment : paymentService.findRecent()) {
+                paymentsData.add(new PaymentRowData(payment.referenceNumber(), payment.studentName(), payment.programId(),
+                        formatAmount(payment.amount()), payment.paymentType(), payment.status(), payment.paymentDate().toString()));
+            }
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load payment records. Run the payments SQL migration first.",
+                    "Payment Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JPanel createContent() {

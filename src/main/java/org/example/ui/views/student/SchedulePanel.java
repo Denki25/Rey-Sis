@@ -35,8 +35,6 @@ public class SchedulePanel extends JPanel {
     private static final Color TEXT = new Color(18, 43, 39);
     private static final Color MUTED = new Color(106, 112, 111);
     private static final Color PAGE = new Color(247, 248, 246);
-    private static final String FIRST_SEMESTER = "AY 2026 - 2027  ·  1st Semester";
-    private static final String SECOND_SEMESTER = "AY 2026 - 2027  ·  2nd Semester";
 
     private final Student student;
     private final DefaultTableModel tableModel = new DefaultTableModel(
@@ -47,8 +45,7 @@ public class SchedulePanel extends JPanel {
         }
     };
     private final JTable scheduleTable = new JTable(tableModel);
-    private final JComboBox<String> semesterSelector = new JComboBox<>(
-            new String[]{FIRST_SEMESTER, SECOND_SEMESTER});
+    private final JComboBox<String> semesterSelector = new JComboBox<>(new String[]{"Enrolled schedule"});
 
     public SchedulePanel(Student student) {
         this.student = student;
@@ -57,7 +54,7 @@ public class SchedulePanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(28, 28, 28, 28));
         add(createPageHeader(), BorderLayout.NORTH);
         add(createScheduleCard(), BorderLayout.CENTER);
-        loadSchedule(FIRST_SEMESTER);
+        loadSchedule("Enrolled schedule");
         semesterSelector.addActionListener(event -> loadSchedule((String) semesterSelector.getSelectedItem()));
     }
 
@@ -170,16 +167,12 @@ public class SchedulePanel extends JPanel {
 
     private void loadSchedule(String semester) {
         tableModel.setRowCount(0);
-        if (!FIRST_SEMESTER.equals(semester)) {
-            return;
-        }
-        String[] days = {"Th", "T", "Th/F"};
         for (int index = 0; index < student.getSchedule().size(); index++) {
             ScheduleItem item = student.getSchedule().get(index);
             tableModel.addRow(new Object[]{
                     item.getCourse().getCode(),
                     item.getCourse().getTitle(),
-                    days[index % days.length],
+                    item.getDayOfWeek(),
                     formatTime(item.getTime()),
                     item.getRoom()
             });

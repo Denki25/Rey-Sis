@@ -1,6 +1,8 @@
 package org.example.ui.views.student;
 
 import org.example.model.Student;
+import org.example.model.Announcement;
+import org.example.model.Task;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -243,11 +245,11 @@ public class StudentRequestFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(student != null ? student.getName() : "Justine Rivera");
+        JLabel userName = new JLabel(student == null ? "" : student.getName());
         userName.setFont(new Font("SansSerif", Font.BOLD, 12));
         userName.setForeground(TEXT);
 
-        JLabel userSub = new JLabel(student != null ? student.getProgram() + " - " + student.getStudentId() : "BSIT - 2025-0011");
+        JLabel userSub = new JLabel(student == null ? "" : student.getProgram() + " - " + student.getStudentId());
         userSub.setFont(new Font("SansSerif", Font.PLAIN, 10));
         userSub.setForeground(MUTED);
 
@@ -458,9 +460,9 @@ public class StudentRequestFrame {
         aList.setOpaque(false);
         aList.setLayout(new BoxLayout(aList, BoxLayout.Y_AXIS));
         aList.add(Box.createVerticalStrut(10));
-        aList.add(createListRow(VectorIcon.Type.DOT, YELLOW_DOT, "Your grades for this semester are now available.", "Oct 5, 2025", null));
-        aList.add(createListRow(VectorIcon.Type.DOT, YELLOW_DOT, "Enrollment for midyear term will start next month.", "Oct 4, 2025", null));
-        aList.add(createListRow(VectorIcon.Type.DOT, YELLOW_DOT, "System maintenance this Saturday, 8:00 PM.", "Oct 3, 2025", null));
+        for (Announcement announcement : student.getAnnouncements()) {
+            aList.add(createListRow(VectorIcon.Type.DOT, YELLOW_DOT, announcement.getMessage(), announcement.getDate(), null));
+        }
         announcementCard.add(aList, BorderLayout.CENTER);
 
         // My Tasks Card
@@ -475,10 +477,10 @@ public class StudentRequestFrame {
         tList.setOpaque(false);
         tList.setLayout(new BoxLayout(tList, BoxLayout.Y_AXIS));
         tList.add(Box.createVerticalStrut(10));
-        tList.add(createListRow(VectorIcon.Type.BOX, MUTED, "Settle tuition fee", null, "Due Oct 10"));
-        tList.add(createListRow(VectorIcon.Type.BOX, MUTED, "Evaluate professors", null, "Due Oct 15"));
-        tList.add(createListRow(VectorIcon.Type.BOX, MUTED, "Update personal information", null, null));
-        tList.add(createListRow(VectorIcon.Type.BOX, MUTED, "Apply for scholarship (optional)", null, null));
+        for (Task task : student.getTasks()) {
+            tList.add(createListRow(VectorIcon.Type.BOX, MUTED, task.getTitle(), null,
+                    task.getDueDate().isBlank() ? null : task.getDueDate()));
+        }
         tasksCard.add(tList, BorderLayout.CENTER);
 
         bottomContainer.add(announcementCard);

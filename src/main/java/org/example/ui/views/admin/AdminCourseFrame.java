@@ -1,5 +1,7 @@
 package org.example.ui.views.admin;
 
+import org.example.data.CourseRepository;
+import org.example.model.Course;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -24,6 +26,7 @@ public class AdminCourseFrame extends JFrame {
     private final Color BORDER_COLOR = new Color(226, 232, 240);
     private final Color GOLD = new Color(207, 160, 48);
     private final List<CourseData> courses = new ArrayList<>();
+    private final CourseRepository courseRepository = new CourseRepository();
     private JPanel catalogListPanel;
     private JPanel sectionsPanel;
     private JLabel selectedCourseTitle;
@@ -45,16 +48,16 @@ public class AdminCourseFrame extends JFrame {
     }
 
     private void initializeCourses() {
-        CourseData dbms = new CourseData("DBMS 101", "Database Management Systems", 4, "Computer Science", "1st Sem 2026-2027");
-        dbms.sections.add(new SectionData("Section A (DBMS101-A)", "MWF 08:00 AM - 09:30 AM", "Lab 3", "Prof. M. Santos", 42, 45));
-        dbms.sections.add(new SectionData("Section B (DBMS101-B)", "TTh 10:00 AM - 11:30 AM", "Lab 2", "Prof. R. Reyes", 45, 45));
-        dbms.sections.add(new SectionData("Section C (DBMS101-C)", "MWF 01:00 PM - 02:30 PM", "Rm 204", "Prof. M. Santos", 28, 45));
-        dbms.sections.add(new SectionData("Section D (DBMS101-D)", "SAT 09:00 AM - 12:00 PM", "Lab 1", "Prof. J. Cruz", 15, 45));
-        courses.add(dbms);
-        courses.add(new CourseData("OOP 202", "Object-Oriented Programming", 3, "Computer Science", "1st Sem 2026-2027"));
-        courses.add(new CourseData("OS 301", "Operating Systems", 3, "Computer Science", "1st Sem 2026-2027"));
-        courses.add(new CourseData("ACC 101", "Fundamentals of Accounting", 3, "Accountancy", "1st Sem 2026-2027"));
-        selectedCourse = dbms;
+        try {
+            for (Course course : courseRepository.findAll()) {
+                courses.add(new CourseData(course.getCode(), course.getTitle(), course.getUnits(), "", ""));
+            }
+        } catch (java.sql.SQLException exception) {
+            JOptionPane.showMessageDialog(this, "Unable to load courses from the database.", "Course Error", JOptionPane.ERROR_MESSAGE);
+        }
+        if (!courses.isEmpty()) {
+            selectedCourse = courses.get(0);
+        }
     }
 
     private JPanel createSidebar() {
@@ -625,18 +628,21 @@ public class AdminCourseFrame extends JFrame {
             if (course == null) {
                 CourseData newCourse = new CourseData(code.getText().trim(), title.getText().trim(), unitCount,
                         department.getText().trim(), term.getText().trim());
+                courseRepository.create(new Course(newCourse.code, newCourse.title, newCourse.units), newCourse.department);
                 courses.add(newCourse);
                 selectedCourse = newCourse;
             } else {
+                String oldCode = course.code;
                 course.code = code.getText().trim();
                 course.title = title.getText().trim();
                 course.units = unitCount;
                 course.department = department.getText().trim();
                 course.term = term.getText().trim();
+                courseRepository.update(oldCode, new Course(course.code, course.title, course.units), course.department);
             }
             refreshCatalog();
             refreshSectionDetails();
-        } catch (IllegalArgumentException exception) {
+        } catch (IllegalArgumentException | java.sql.SQLException exception) {
             JOptionPane.showMessageDialog(this, "Please enter valid course details and units.", "Invalid Course", JOptionPane.WARNING_MESSAGE);
         }
     }

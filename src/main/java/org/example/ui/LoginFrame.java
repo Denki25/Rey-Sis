@@ -1,10 +1,14 @@
 package org.example.ui;
 
 import org.example.auth.LoginValidator;
-import org.example.data.MockStudentRepository;
+import org.example.auth.AuthService;
+import org.example.auth.UserSession;
+import org.example.data.StudentRepository;
+import org.example.model.User;
 import org.example.ui.views.admin.AdminDashboardFrame;
 import org.example.ui.views.cashier.CashierDashboardFrame;
 import org.example.ui.views.student.StudentDashboardFrame;
+import org.example.ui.views.teacher.TeacherDashboardFrame;
 import org.example.model.Cashier;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -37,6 +41,7 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.prefs.Preferences;
+import java.sql.SQLException;
 
 import javax.imageio.ImageIO;
 
@@ -49,6 +54,8 @@ public class LoginFrame {
 
     private final JFrame window = new JFrame("REY SIS | Login");
     private final Preferences preferences = Preferences.userNodeForPackage(LoginFrame.class);
+    private final AuthService authService = new AuthService();
+    private final StudentRepository studentRepository = new StudentRepository();
     private final PromptTextField usernameField = new PromptTextField("Enter your username");
     private final PromptPasswordField passwordField = new PromptPasswordField("Enter your password");
     private final JCheckBox rememberMe = new JCheckBox("Remember me");
@@ -250,31 +257,50 @@ public class LoginFrame {
             return;
         }
 
-        String password = new String(passwordChars);
+        try {
+            AuthService.AuthenticationResult result = authService.authenticate(username, passwordChars);
+            if (result.status() == AuthService.AuthenticationResult.Status.INVALID) {
+                showMessage(result.message());
+                return;
+            }
+            if (result.status() == AuthService.AuthenticationResult.Status.INACTIVE) {
+                showMessage(result.message());
+                return;
+            }
+            openAuthenticatedUser(result.user());
+            saveRememberedUsername(username);
+        } catch (SQLException exception) {
+            showMessage("Unable to connect to the database. Please try again later.");
+        } finally {
+            Arrays.fill(passwordChars, '\0');
+        }
+    }
 
-        // Role-Based Authentication Logic
-        if (username.equalsIgnoreCase("admin") && password.equals("admin123")) {
+    private void openAuthenticatedUser(User user) throws SQLException {
+        UserSession.start(user);
+        String role = user.getRole() == null ? "" : user.getRole().toUpperCase();
+        if ("STUDENT".equals(role)) {
+            var student = studentRepository.findByUserId(user.getUserId());
+            if (student == null) {
+                UserSession.clear();
+                showMessage("No student profile is linked to this account.");
+                return;
+            }
+            window.dispose();
+            new StudentDashboardFrame(student).showWindow();
+        } else if ("TEACHER".equals(role)) {
+            window.dispose();
+            new TeacherDashboardFrame().showWindow();
+        } else if ("ADMIN".equals(role) || "REGISTRAR".equals(role)) {
             window.dispose();
             new AdminDashboardFrame().showWindow();
-        } else if (username.equalsIgnoreCase("cashier") && password.equals("cashier123")) {
-            window.dispose(); // Closes the login window
-            Cashier loggedInCashier = new Cashier("Head Cashier", "CASH-001");
-            new CashierDashboardFrame(loggedInCashier).showWindow();
-        } else if (username.equalsIgnoreCase("student") && password.equals("student123")) {
+        } else if ("CASHIER".equals(role)) {
             window.dispose();
-            new StudentDashboardFrame(MockStudentRepository.getSampleStudent()).showWindow();
+            new CashierDashboardFrame(new Cashier(user.getUsername(), String.valueOf(user.getUserId()))).showWindow();
         } else {
-            showMessage("Invalid username or password.");
+            UserSession.clear();
+            showMessage("This account has no supported application role.");
         }
-
-        boolean validCredentials = username.equalsIgnoreCase("admin") && password.equals("admin123")
-                || username.equalsIgnoreCase("cashier") && password.equals("cashier123")
-                || username.equalsIgnoreCase("student") && password.equals("student123");
-        if (validCredentials) {
-            saveRememberedUsername(username);
-        }
-
-        Arrays.fill(passwordChars, '0');
     }
 
     private void loadRememberedUsername() {

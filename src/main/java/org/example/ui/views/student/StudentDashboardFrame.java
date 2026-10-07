@@ -2,6 +2,7 @@ package org.example.ui.views.student;
 import org.example.ui.LoginFrame;
 import org.example.model.Student;
 import org.example.model.Task;
+import org.example.service.TaskService;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -37,6 +38,7 @@ import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.awt.geom.Path2D;
+import java.sql.SQLException;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
@@ -52,6 +54,7 @@ public class StudentDashboardFrame {
     private final JFrame window = new JFrame("REY SIS | Student Dashboard");
     private final Student student;
     private final DefaultListModel<Task> taskModel = new DefaultListModel<>();
+    private final TaskService taskService = new TaskService();
 
     public StudentDashboardFrame(Student student) {
         this.student = student;
@@ -74,7 +77,7 @@ public class StudentDashboardFrame {
         content.add(createSidebar(), BorderLayout.WEST);
         JPanel main = new JPanel(new BorderLayout());
         main.setBackground(PAGE);
-        main.add(new HeroPanel(), BorderLayout.NORTH);
+        main.add(new HeroPanel(student.getName()), BorderLayout.NORTH);
         JScrollPane scrollPane = new JScrollPane(createDashboardBody());
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
@@ -259,7 +262,29 @@ public class StudentDashboardFrame {
         right.setOpaque(false);
         right.add(createInformationCard(), BorderLayout.NORTH);
         right.add(createEnrollmentCard(), BorderLayout.CENTER);
+        right.add(createAnnouncementsCard(), BorderLayout.SOUTH);
         return right;
+    }
+
+    private JPanel createAnnouncementsCard() {
+        CardPanel card = new CardPanel(Color.WHITE);
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        card.add(sectionTitle("Announcements", IconType.ANNOUNCEMENT, null), BorderLayout.NORTH);
+        JPanel rows = new JPanel();
+        rows.setOpaque(false);
+        rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+        if (student.getAnnouncements().isEmpty()) {
+            rows.add(smallLabel("No announcements available.", 9, MUTED));
+        } else {
+            student.getAnnouncements().stream().limit(3).forEach(announcement -> {
+                rows.add(smallLabel(announcement.getMessage(), 9, TEXT));
+                rows.add(smallLabel(announcement.getDate(), 8, MUTED));
+                rows.add(Box.createVerticalStrut(5));
+            });
+        }
+        card.add(rows, BorderLayout.CENTER);
+        return card;
     }
 
     private JPanel createInformationCard() {
@@ -305,14 +330,15 @@ public class StudentDashboardFrame {
         card.add(header, BorderLayout.NORTH);
         JPanel content = new JPanel(new GridLayout(1, 2, 12, 0));
         content.setOpaque(false);
-        content.add(new DonutPanel(student.getEnrolledSubjects(), 6));
+        int totalSubjects = Math.max(student.getEnrolledSubjects(), 1);
+        content.add(new DonutPanel(student.getEnrolledSubjects(), totalSubjects));
         JPanel legend = new JPanel(new GridLayout(3, 1, 0, 3));
         legend.setOpaque(false);
         legend.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 1, 0, 0, BORDER),
                 BorderFactory.createEmptyBorder(2, 14, 2, 0)));
         addLegendRow(legend, "Enrolled", String.valueOf(student.getEnrolledSubjects()), DEEP_GREEN);
-        addLegendRow(legend, "Remaining", String.valueOf(6 - student.getEnrolledSubjects()), GOLD);
+        addLegendRow(legend, "Remaining", String.valueOf(Math.max(0, totalSubjects - student.getEnrolledSubjects())), GOLD);
         addLegendRow(legend, "Total Units", String.valueOf(student.getMaximumUnits()), new Color(126, 128, 126));
         content.add(legend);
         card.add(content, BorderLayout.CENTER);
@@ -372,7 +398,12 @@ public class StudentDashboardFrame {
     private void addTask() {
         String title = JOptionPane.showInputDialog(window, "Enter task title:", "Add Task", JOptionPane.PLAIN_MESSAGE);
         if (title != null && !title.trim().isEmpty()) {
-            taskModel.addElement(new Task(title.trim(), ""));
+            try {
+                int taskId = taskService.addTask(student.getStudentId(), title.trim());
+                taskModel.addElement(new Task(taskId, title.trim(), "", false));
+            } catch (SQLException exception) {
+                showMessage("Unable to save the task. Please try again later.");
+            }
         }
     }
 
@@ -385,10 +416,18 @@ public class StudentDashboardFrame {
             row.setBorder(BorderFactory.createEmptyBorder(3, 0, 3, 0));
 
             JCheckBox checkBox = new JCheckBox();
+            checkBox.setSelected(task.isCompleted());
             checkBox.setOpaque(false);
             checkBox.setFocusPainted(false);
             JLabel titleLabel = smallLabel(task.getTitle(), 9, TEXT);
-            checkBox.addActionListener(event -> taskModel.removeElement(task));
+            checkBox.addActionListener(event -> {
+                try {
+                    taskService.setCompleted(student.getStudentId(), task.getTaskId(), checkBox.isSelected());
+                } catch (SQLException exception) {
+                    checkBox.setSelected(task.isCompleted());
+                    showMessage("Unable to update the task. Please try again later.");
+                }
+            });
             row.add(checkBox, BorderLayout.WEST);
             row.add(titleLabel, BorderLayout.CENTER);
 
@@ -405,7 +444,12 @@ public class StudentDashboardFrame {
             }
             JButton removeButton = actionButton("Remove", null);
             removeButton.addActionListener(event -> {
-                taskModel.removeElement(task);
+                try {
+                    taskService.deleteTask(student.getStudentId(), task.getTaskId());
+                    taskModel.removeElement(task);
+                } catch (SQLException exception) {
+                    showMessage("Unable to delete the task. Please try again later.");
+                }
             });
             actions.add(removeButton);
             row.add(actions, BorderLayout.EAST);
@@ -481,6 +525,10 @@ public class StudentDashboardFrame {
         javax.swing.JOptionPane.showMessageDialog(window, "Dashboard is already open.", "REY SIS", javax.swing.JOptionPane.INFORMATION_MESSAGE);
     }
 
+    private void showMessage(String message) {
+        JOptionPane.showMessageDialog(window, message, "REY SIS", JOptionPane.INFORMATION_MESSAGE);
+    }
+
     private static BufferedImage loadImage(String resourcePath) {
         try (InputStream stream = StudentDashboardFrame.class.getResourceAsStream(resourcePath)) {
             return stream == null ? null : ImageIO.read(stream);
@@ -501,8 +549,10 @@ public class StudentDashboardFrame {
 
     private static class HeroPanel extends JPanel {
         private final BufferedImage image = loadImage("/images/university-building.jpg");
+        private final String studentName;
 
-        HeroPanel() {
+        HeroPanel(String studentName) {
+            this.studentName = studentName;
             setPreferredSize(new Dimension(0, 170));
             setOpaque(false);
             setLayout(new BorderLayout());
@@ -513,7 +563,7 @@ public class StudentDashboardFrame {
             JLabel greeting = new JLabel("Good day,");
             greeting.setFont(new Font("SansSerif", Font.BOLD, 20));
             greeting.setForeground(DEEP_GREEN);
-            JLabel name = new JLabel("Justine Rivera!");
+            JLabel name = new JLabel(studentName + "!");
             name.setFont(new Font("SansSerif", Font.BOLD, 30));
             name.setForeground(DEEP_GREEN);
             JLabel line = new JLabel("Stay consistent.");

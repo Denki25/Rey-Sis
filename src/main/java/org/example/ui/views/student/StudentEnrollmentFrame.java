@@ -1,6 +1,9 @@
 package org.example.ui.views.student;
 
 import org.example.model.Student;
+import org.example.model.EnrollmentRecord;
+import org.example.model.Course;
+import org.example.service.EnrollmentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -61,13 +64,13 @@ public class StudentEnrollmentFrame {
 
     private final JFrame window = new JFrame("REY SIS | Enrollment");
     private final Student student;
+    private final EnrollmentService enrollmentService = new EnrollmentService();
     private final DefaultTableModel selectedSubjectsModel = new DefaultTableModel(
             new Object[]{"CODE", "COURSE TITLE", "UNITS", "ACTION"}, 0) {
         public boolean isCellEditable(int row, int column) {
             return column == 3;
         }
     };
-    private final List<String> passedCourses = List.of("COMSCI 2100", "INTECH 1100", "MATH 1100", "SOCSCI 1100", "PATHFIT 1");
     private final List<SubjectRowData> selectedSubjects = new ArrayList<>();
 
     private JLabel totalSubjectsLabel;
@@ -95,11 +98,12 @@ public class StudentEnrollmentFrame {
     }
 
     private void initDefaultSubjects() {
-        selectedSubjectsModel.addRow(new Object[]{"COMSCI 2100", "Object-Oriented Programming", 3, "Remove"});
-        selectedSubjectsModel.addRow(new Object[]{"INTECH 1100", "Discrete Mathematics", 3, "Remove"});
-        selectedSubjectsModel.addRow(new Object[]{"MATH 1100", "Mathematics in the Modern World", 3, "Remove"});
-        selectedSubjectsModel.addRow(new Object[]{"SOCSCI 1100", "Ethics", 3, "Remove"});
-        selectedSubjectsModel.addRow(new Object[]{"PATHFIT 1", "Movement Competency Training", 2, "Remove"});
+        for (EnrollmentRecord enrollment : student.getEnrollments()) {
+            if (enrollment.status() == null || "ENROLLED".equalsIgnoreCase(enrollment.status())) {
+                selectedSubjectsModel.addRow(new Object[]{enrollment.course().getCode(), enrollment.course().getTitle(),
+                        enrollment.course().getUnits(), "Remove"});
+            }
+        }
         selectedSubjectsModel.addTableModelListener(event -> {
             if (event.getType() == TableModelEvent.INSERT || event.getType() == TableModelEvent.DELETE
                     || event.getType() == TableModelEvent.UPDATE) {
@@ -275,11 +279,11 @@ public class StudentEnrollmentFrame {
         JPanel userText = new JPanel();
         userText.setOpaque(false);
         userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
-        JLabel userName = new JLabel(student != null ? student.getName() : "Justine Rivera");
+        JLabel userName = new JLabel(student == null ? "" : student.getName());
         userName.setFont(new Font("SansSerif", Font.BOLD, 11));
         userName.setForeground(TEXT);
 
-        JLabel userSub = new JLabel("BSIT · 2025-0011");
+        JLabel userSub = new JLabel(student == null ? "" : student.getProgram() + " · " + student.getStudentId());
         userSub.setFont(new Font("SansSerif", Font.PLAIN, 9));
         userSub.setForeground(MUTED);
 
@@ -742,12 +746,13 @@ public class StudentEnrollmentFrame {
     }
 
     private void openAvailableSubjectsDialog() {
-        List<AvailableSubject> availableSubjects = List.of(
-                new AvailableSubject("COMSCI 2200", "Data Structures and Algorithms", 3, "COMSCI 2100"),
-                new AvailableSubject("INTECH 1200", "Web Systems and Technologies", 3, "INTECH 1100"),
-                new AvailableSubject("MATH 1200", "Statistics for Computing", 3, "MATH 1100"),
-                new AvailableSubject("PATHFIT 2", "Exercise and Sports", 2, "PATHFIT 1")
-        );
+        List<Course> availableSubjects;
+        try {
+            availableSubjects = enrollmentService.findCourses();
+        } catch (java.sql.SQLException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load courses from the database.", "Enrollment Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         JDialog dialog = new JDialog(window, "Available Subjects", true);
         dialog.setLayout(new BorderLayout(0, 12));
         dialog.setMinimumSize(new Dimension(760, 360));
@@ -764,8 +769,8 @@ public class StudentEnrollmentFrame {
                 new Object[]{"CODE", "COURSE TITLE", "UNITS", "PREREQUISITES", "ACTION"}, 0) {
             public boolean isCellEditable(int row, int column) { return column == 4; }
         };
-        for (AvailableSubject subject : availableSubjects) {
-            availableModel.addRow(new Object[]{subject.code, subject.title, subject.units, subject.prerequisite, "Add"});
+        for (Course subject : availableSubjects) {
+            availableModel.addRow(new Object[]{subject.getCode(), subject.getTitle(), subject.getUnits(), "", "Add"});
         }
         JTable availableTable = new JTable(availableModel);
         availableTable.setRowHeight(40);
@@ -803,22 +808,25 @@ public class StudentEnrollmentFrame {
         dialog.setVisible(true);
     }
 
-    private void addAvailableSubject(AvailableSubject subject) {
+    private void addAvailableSubject(Course subject) {
         for (int row = 0; row < selectedSubjectsModel.getRowCount(); row++) {
-            if (subject.code.equalsIgnoreCase(String.valueOf(selectedSubjectsModel.getValueAt(row, 0)))) {
+            if (subject.getCode().equalsIgnoreCase(String.valueOf(selectedSubjectsModel.getValueAt(row, 0)))) {
                 JOptionPane.showMessageDialog(window, "This subject is already selected.", "Cannot Add Subject", JOptionPane.WARNING_MESSAGE);
                 return;
             }
         }
-        if (calculateTotalUnits() + subject.units > 24) {
+        if (calculateTotalUnits() + subject.getUnits() > 24) {
             JOptionPane.showMessageDialog(window, "You cannot exceed the 24-unit semester limit.", "Cannot Add Subject", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if (!subject.prerequisite.isBlank() && !passedCourses.contains(subject.prerequisite)) {
-            JOptionPane.showMessageDialog(window, "Prerequisite required: " + subject.prerequisite, "Cannot Add Subject", JOptionPane.WARNING_MESSAGE);
-            return;
+        try {
+            String academicYear = student.getEnrollmentSemester() == null ? "" : student.getEnrollmentSemester().replaceFirst("^.*AY ", "");
+            String semester = student.getEnrollmentSemester() == null ? "" : student.getEnrollmentSemester().replaceFirst(", AY .*$", "");
+            enrollmentService.enroll(student.getStudentId(), subject.getCode(), academicYear, semester);
+            selectedSubjectsModel.addRow(new Object[]{subject.getCode(), subject.getTitle(), subject.getUnits(), "Remove"});
+        } catch (java.sql.SQLException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to enroll in this course: " + exception.getMessage(), "Enrollment Error", JOptionPane.WARNING_MESSAGE);
         }
-        selectedSubjectsModel.addRow(new Object[]{subject.code, subject.title, subject.units, "Remove"});
     }
 
     private void openDashboard() {

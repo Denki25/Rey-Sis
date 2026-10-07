@@ -1,5 +1,8 @@
 package org.example.ui.views.admin;
 
+import org.example.data.DashboardStatisticsRepository;
+import org.example.data.StudentDirectoryRepository;
+import org.example.service.AdminStudentService;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -9,6 +12,7 @@ import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.sql.SQLException;
 
 public class AdminDashboardFrame {
     private static final Color SIDEBAR_BG = new Color(7, 43, 33);
@@ -27,11 +31,18 @@ public class AdminDashboardFrame {
     private String adminRole = "Chief Registrar";
     private JLabel adminHeaderName;
     private JLabel adminHeaderRole;
+    private DashboardStatisticsRepository.DashboardStatistics statistics;
+    private final AdminStudentService studentService = new AdminStudentService();
 
     public AdminDashboardFrame() {
         taskModel.addElement("Clear pending IT validations");
         taskModel.addElement("Merge overlapping BSCE sections");
         taskModel.addElement("Export weekly enrollment audit report");
+        try {
+            statistics = new DashboardStatisticsRepository().find();
+        } catch (java.sql.SQLException exception) {
+            statistics = new DashboardStatisticsRepository.DashboardStatistics(0, 0, 0, 0);
+        }
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1280, 800));
         window.setSize(1360, 900);
@@ -85,6 +96,7 @@ public class AdminDashboardFrame {
         navPanel.add(createNavButton("Student Masterlist", IconType.LIST, false));
         navPanel.add(createNavButton("Enrollment Validation", IconType.WINDOW, false));
         navPanel.add(createNavButton("Courses & Sections", IconType.LAYOUT, false));
+        navPanel.add(createNavButton("Honors List", IconType.GRID, false));
         navPanel.add(createNavButton("System Audit", IconType.USER_OUTLINE, false));
         sidebar.add(navPanel, BorderLayout.CENTER);
 
@@ -145,6 +157,8 @@ public class AdminDashboardFrame {
                 new AdminValidationFrame().showWindow();
             } else if (text.equals("Courses & Sections")) {
                 new AdminCourseFrame().setVisible(true);
+            } else if (text.equals("Honors List")) {
+                new AdminHonorsFrame().showWindow();
             } else if (text.equals("System Audit")) {
                 new AdminLogsFrame().setVisible(true);
             }
@@ -257,10 +271,10 @@ public class AdminDashboardFrame {
         JPanel stats = new JPanel(new GridLayout(1, 4, 20, 0));
         stats.setOpaque(false);
 
-        stats.add(createStatCard("Total Enrolled", "3,482", IconType.USER_OUTLINE, SIDEBAR_BG, STAT_GREEN_BG));
-        stats.add(createStatCard("Pending Validation", "124", IconType.DOCUMENT, SIDEBAR_BG, STAT_YELLOW_BG));
-        stats.add(createStatCard("Full Sections", "15", IconType.GRID, SIDEBAR_BG, STAT_GREEN_BG));
-        stats.add(createStatCard("System Status", "Active", IconType.CHECK, SIDEBAR_BG, STAT_YELLOW_BG));
+        stats.add(createStatCard("Total Students", String.valueOf(statistics.totalStudents()), IconType.USER_OUTLINE, SIDEBAR_BG, STAT_GREEN_BG));
+        stats.add(createStatCard("Total Enrolled", String.valueOf(statistics.enrolledStudents()), IconType.DOCUMENT, SIDEBAR_BG, STAT_YELLOW_BG));
+        stats.add(createStatCard("Total Courses", String.valueOf(statistics.totalCourses()), IconType.GRID, SIDEBAR_BG, STAT_GREEN_BG));
+        stats.add(createStatCard("Active Users", String.valueOf(statistics.activeUsers()), IconType.CHECK, SIDEBAR_BG, STAT_YELLOW_BG));
 
         return stats;
     }
@@ -335,11 +349,20 @@ public class AdminDashboardFrame {
         queueList.setLayout(new BoxLayout(queueList, BoxLayout.Y_AXIS));
         queueList.setOpaque(false);
 
-        queueList.add(createQueueRow("Justine Rivera", "2025-0011", "BS Information Technology", "3rd Year", "Cleared", new Color(38, 194, 129)));
-        queueList.add(Box.createVerticalStrut(10));
-        queueList.add(createQueueRow("Mark Mendoza", "2025-0012", "BS Civil Engineering", "2nd Year", "Pending", new Color(243, 156, 18)));
-        queueList.add(Box.createVerticalStrut(10));
-        queueList.add(createQueueRow("Prince Cariaga", "2025-0013", "BS Information Technology", "3rd Year", "Conflict", new Color(231, 76, 60)));
+        try {
+            int count = 0;
+            for (StudentDirectoryRepository.StudentSummary student : studentService.findStudents()) {
+                if (count++ == 3) break;
+                if (count > 1) queueList.add(Box.createVerticalStrut(10));
+                Color color = "Enrolled".equals(student.enrollmentStatus())
+                        ? new Color(38, 194, 129) : new Color(243, 156, 18);
+                queueList.add(createQueueRow(student.name(), student.id(), student.program(), student.yearLevel(),
+                        student.enrollmentStatus(), color));
+            }
+            if (count == 0) queueList.add(new JLabel("No student records available."));
+        } catch (SQLException | SecurityException exception) {
+            queueList.add(new JLabel("Unable to load student records."));
+        }
         left.add(queueList, gbc);
 
         // My Tasks spans the full width below the validation queue.
