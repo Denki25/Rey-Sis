@@ -126,9 +126,6 @@ public class StudentProfileFrame {
         navigation.add(createNavigationButton("Enrollment", StudentDashboardFrame.IconType.ENROLLMENT, false));
         navigation.add(createNavigationButton("My Schedule", StudentDashboardFrame.IconType.CALENDAR, false));
         navigation.add(createNavigationButton("Grades", StudentDashboardFrame.IconType.GRADES, false));
-        navigation.add(createNavigationButton("Academic Records", StudentDashboardFrame.IconType.RECORDS, false));
-        navigation.add(createNavigationButton("Requests", StudentDashboardFrame.IconType.REQUESTS, false));
-        navigation.add(createNavigationButton("Notifications", StudentDashboardFrame.IconType.BELL, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -171,6 +168,9 @@ public class StudentProfileFrame {
                 } else if (text.equals("Grades")) {
                     window.dispose();
                     new StudentGradesFrame(student).showWindow();
+                } else if (text.equals("My Schedule")) {
+                    window.dispose();
+                    new StudentScheduleFrame(student).showWindow();
                 }else if (text.equals("Requests")) {
                     window.dispose();
                     new StudentRequestFrame(student).showWindow(); // <--- Add this routing

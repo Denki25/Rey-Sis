@@ -1,7 +1,5 @@
 package org.example.ui.views.student;
 import org.example.ui.LoginFrame;
-import org.example.model.Announcement;
-import org.example.model.ScheduleItem;
 import org.example.model.Student;
 import org.example.model.Task;
 
@@ -10,10 +8,12 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
@@ -37,6 +37,8 @@ import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.awt.geom.Path2D;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
 
 public class StudentDashboardFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -49,9 +51,13 @@ public class StudentDashboardFrame {
 
     private final JFrame window = new JFrame("REY SIS | Student Dashboard");
     private final Student student;
+    private final DefaultListModel<Task> taskModel = new DefaultListModel<>();
 
     public StudentDashboardFrame(Student student) {
         this.student = student;
+        for (Task task : student.getTasks()) {
+            taskModel.addElement(task);
+        }
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1060, 680));
         window.setSize(1360, 820);
@@ -115,9 +121,6 @@ public class StudentDashboardFrame {
         navigation.add(createNavigationButton("Enrollment", IconType.ENROLLMENT, false));
         navigation.add(createNavigationButton("My Schedule", IconType.CALENDAR, false));
         navigation.add(createNavigationButton("Grades", IconType.GRADES, false));
-        navigation.add(createNavigationButton("Academic Records", IconType.RECORDS, false));
-        navigation.add(createNavigationButton("Requests", IconType.REQUESTS, false));
-        navigation.add(createNavigationButton("Notifications", IconType.BELL, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -133,6 +136,11 @@ public class StudentDashboardFrame {
     private void openEnrollment() {
         window.dispose();
         new StudentEnrollmentFrame(student).showWindow();
+    }
+
+    private void openSchedule() {
+        window.dispose();
+        new StudentScheduleFrame(student).showWindow();
     }
 
     private JButton createNavigationButton(String text, IconType iconType, boolean active) {
@@ -161,18 +169,14 @@ public class StudentDashboardFrame {
             } else if (text.equals("Grades")) {
                 window.dispose();
                 new StudentGradesFrame(student).showWindow();
+            } else if (text.equals("My Schedule")) {
+                openSchedule();
             } else if (active) {
                 showDashboardMessage();
-            }else if (text.equals("Requests")) {
-                window.dispose();
-                new StudentRequestFrame(student).showWindow(); // <--- Add this routing
             } else {
                 showComingSoon(text);
             }
         });
-        if (text.equals("Notifications")) {
-            button.add(new BadgeLabel("3"));
-        }
         return button;
     }
 
@@ -203,12 +207,6 @@ public class StudentDashboardFrame {
         constraints.weightx = 0.33;
         constraints.insets = new Insets(0, 0, 12, 0);
         grid.add(createRightColumn(), constraints);
-        constraints.gridx = 0;
-        constraints.gridy = 1;
-        constraints.gridwidth = 2;
-        constraints.weightx = 1;
-        constraints.insets = new Insets(0, 0, 0, 0);
-        grid.add(createBottomCards(), constraints);
         return grid;
     }
 
@@ -216,7 +214,7 @@ public class StudentDashboardFrame {
         JPanel left = new JPanel(new BorderLayout(0, 14));
         left.setOpaque(false);
         left.add(createStatsPanel(), BorderLayout.NORTH);
-        left.add(createSchedulePanel(), BorderLayout.CENTER);
+        left.add(createTasksCard(), BorderLayout.CENTER);
         return left;
     }
 
@@ -236,66 +234,24 @@ public class StudentDashboardFrame {
 
     private JPanel createStatCard(String title, String value, String suffix, IconType iconType, Color iconColor) {
         CardPanel card = new CardPanel(Color.WHITE);
-        card.setLayout(new BorderLayout(4, 4));
-        card.setBorder(BorderFactory.createEmptyBorder(12, 13, 10, 10));
-        card.add(new DashboardIconLabel(iconType, iconColor), BorderLayout.NORTH);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(BorderFactory.createEmptyBorder(12, 10, 12, 10));
+        DashboardIconLabel icon = new DashboardIconLabel(iconType, iconColor);
+        icon.setAlignmentX(0.5f);
+        card.add(icon);
+        card.add(Box.createVerticalStrut(7));
         JLabel valueLabel = new JLabel(value + suffix);
         valueLabel.setFont(new Font("SansSerif", Font.BOLD, title.equals("Dean's List Standing") ? 19 : 25));
         valueLabel.setForeground(TEXT);
-        card.add(valueLabel, BorderLayout.CENTER);
+        valueLabel.setAlignmentX(0.5f);
+        valueLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        card.add(valueLabel);
+        card.add(Box.createVerticalStrut(5));
         JLabel titleLabel = smallLabel(title, 9, MUTED);
-        card.add(titleLabel, BorderLayout.SOUTH);
+        titleLabel.setAlignmentX(0.5f);
+        titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        card.add(titleLabel);
         return card;
-    }
-
-    private JPanel createSchedulePanel() {
-        CardPanel card = new CardPanel(Color.WHITE);
-        card.setLayout(new BorderLayout(0, 8));
-        card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
-        JPanel header = new JPanel(new BorderLayout());
-        header.setOpaque(false);
-        header.add(sectionTitle("Today's Schedule", IconType.CALENDAR, null), BorderLayout.WEST);
-        header.add(actionButton("View Full Schedule", () -> showComingSoon("Full Schedule")), BorderLayout.EAST);
-        card.add(header, BorderLayout.NORTH);
-        JPanel rows = new JPanel(new GridLayout(student.getSchedule().size(), 1, 0, 7));
-        rows.setOpaque(false);
-        int index = 0;
-        for (ScheduleItem item : student.getSchedule()) {
-            rows.add(createScheduleRow(item, index++));
-        }
-        card.add(rows, BorderLayout.CENTER);
-        return card;
-    }
-
-    private JPanel createScheduleRow(ScheduleItem item, int index) {
-        JPanel row = new JPanel(new GridBagLayout());
-        row.setBackground(new Color(246, 246, 243));
-        row.setBorder(BorderFactory.createMatteBorder(0, 4, 0, 0, index == 1 ? GOLD : DEEP_GREEN));
-        GridBagConstraints constraints = new GridBagConstraints();
-        constraints.gridy = 0;
-        constraints.anchor = GridBagConstraints.WEST;
-        constraints.insets = new Insets(5, 14, 5, 8);
-        JLabel time = multiLineLabel(item.getTime(), 10, TEXT, true);
-        constraints.gridx = 0;
-        constraints.weightx = 0.15;
-        row.add(time, constraints);
-        JPanel course = new JPanel();
-        course.setOpaque(false);
-        course.setLayout(new BoxLayout(course, BoxLayout.Y_AXIS));
-        course.add(smallLabel(item.getCourse().getCode(), 10, TEXT));
-        course.add(smallLabel(item.getCourse().getTitle(), 9, MUTED));
-        constraints.gridx = 1;
-        constraints.weightx = 0.45;
-        row.add(course, constraints);
-        JPanel details = new JPanel();
-        details.setOpaque(false);
-        details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
-        details.add(smallLabel(item.getRoom(), 9, MUTED));
-        details.add(smallLabel(item.getInstructor(), 9, MUTED));
-        constraints.gridx = 2;
-        constraints.weightx = 0.4;
-        row.add(details, constraints);
-        return row;
     }
 
     private JPanel createRightColumn() {
@@ -309,13 +265,13 @@ public class StudentDashboardFrame {
     private JPanel createInformationCard() {
         CardPanel card = new CardPanel(Color.WHITE);
         card.setLayout(new BorderLayout(0, 8));
-        card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        card.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
         header.add(sectionTitle("My Information", IconType.PROFILE, null), BorderLayout.WEST);
-        header.add(actionButton("Edit Profile", () -> showComingSoon("Profile editing")), BorderLayout.EAST);
+        header.add(actionButton("Edit Profile", this::openProfile), BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
-        JPanel details = new JPanel(new GridLayout(6, 1));
+        JPanel details = new JPanel(new GridLayout(6, 1, 0, 2));
         details.setOpaque(false);
         addInfoRow(details, "Student ID", student.getStudentId());
         addInfoRow(details, "Name", student.getName());
@@ -328,11 +284,13 @@ public class StudentDashboardFrame {
     }
 
     private void addInfoRow(JPanel parent, String label, String value) {
-        JPanel row = new JPanel(new GridLayout(1, 2));
+        JPanel row = new JPanel(new GridLayout(1, 2, 12, 0));
         row.setOpaque(false);
-        row.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(242, 242, 239)));
-        row.add(smallLabel(label, 9, MUTED));
-        row.add(smallLabel(value, 9, TEXT));
+        row.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(242, 242, 239)),
+                BorderFactory.createEmptyBorder(4, 0, 4, 0)));
+        row.add(smallLabel(label, 11, MUTED));
+        row.add(smallLabel(value, 11, TEXT));
         parent.add(row);
     }
 
@@ -374,60 +332,68 @@ public class StudentDashboardFrame {
         parent.add(row);
     }
 
-    private JPanel createBottomCards() {
-        JPanel bottom = new JPanel(new GridLayout(1, 2, 14, 0));
-        bottom.setOpaque(false);
-        bottom.add(createAnnouncementsCard());
-        bottom.add(createTasksCard());
-        return bottom;
-    }
-
-    private JPanel createAnnouncementsCard() {
+    private JPanel createTasksCard() {
         CardPanel card = new CardPanel(Color.WHITE);
         card.setLayout(new BorderLayout(0, 8));
-        card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(2, 0, 0, 0, GOLD),
+                BorderFactory.createEmptyBorder(12, 14, 12, 14)));
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
-        header.add(sectionTitle("Recent Announcements", IconType.ANNOUNCEMENT, null), BorderLayout.WEST);
-        header.add(actionButton("View All", () -> showComingSoon("All announcements")), BorderLayout.EAST);
+        header.add(sectionTitle("My Tasks", IconType.TASK, null), BorderLayout.WEST);
+        JButton addTaskButton = actionButton("+ Add Task", null);
+        addTaskButton.addActionListener(event -> addTask());
+        header.add(addTaskButton, BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
-        JPanel rows = new JPanel(new GridLayout(student.getAnnouncements().size(), 1));
+        JPanel rows = new JPanel();
         rows.setOpaque(false);
-        for (Announcement announcement : student.getAnnouncements()) {
-            JPanel row = new JPanel(new BorderLayout(10, 0));
-            row.setOpaque(false);
-            JLabel dot = new JLabel(" ");
-            dot.setOpaque(true);
-            dot.setBackground(new Color(242, 181, 0));
-            dot.setPreferredSize(new Dimension(9, 9));
-            row.add(dot, BorderLayout.WEST);
-            row.add(smallLabel(announcement.getMessage(), 9, TEXT), BorderLayout.CENTER);
-            row.add(smallLabel(announcement.getDate(), 8, MUTED), BorderLayout.EAST);
-            rows.add(row);
-        }
+        rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+        refreshTaskRows(rows);
+        taskModel.addListDataListener(new ListDataListener() {
+            @Override
+            public void intervalAdded(ListDataEvent event) {
+                refreshTaskRows(rows);
+            }
+
+            @Override
+            public void intervalRemoved(ListDataEvent event) {
+                refreshTaskRows(rows);
+            }
+
+            @Override
+            public void contentsChanged(ListDataEvent event) {
+                refreshTaskRows(rows);
+            }
+        });
         card.add(rows, BorderLayout.CENTER);
         return card;
     }
 
-    private JPanel createTasksCard() {
-        CardPanel card = new CardPanel(Color.WHITE);
-        card.setLayout(new BorderLayout(0, 8));
-        card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
-        JPanel header = new JPanel(new BorderLayout());
-        header.setOpaque(false);
-        header.add(sectionTitle("My Tasks", IconType.TASK, null), BorderLayout.WEST);
-        header.add(actionButton("View All", () -> showComingSoon("All tasks")), BorderLayout.EAST);
-        card.add(header, BorderLayout.NORTH);
-        JPanel rows = new JPanel(new GridLayout(student.getTasks().size(), 1));
-        rows.setOpaque(false);
-        for (Task task : student.getTasks()) {
+    private void addTask() {
+        String title = JOptionPane.showInputDialog(window, "Enter task title:", "Add Task", JOptionPane.PLAIN_MESSAGE);
+        if (title != null && !title.trim().isEmpty()) {
+            taskModel.addElement(new Task(title.trim(), ""));
+        }
+    }
+
+    private void refreshTaskRows(JPanel rows) {
+        rows.removeAll();
+        for (int index = 0; index < taskModel.size(); index++) {
+            Task task = taskModel.getElementAt(index);
             JPanel row = new JPanel(new BorderLayout(8, 0));
             row.setOpaque(false);
+            row.setBorder(BorderFactory.createEmptyBorder(3, 0, 3, 0));
+
             JCheckBox checkBox = new JCheckBox();
             checkBox.setOpaque(false);
             checkBox.setFocusPainted(false);
+            JLabel titleLabel = smallLabel(task.getTitle(), 9, TEXT);
+            checkBox.addActionListener(event -> taskModel.removeElement(task));
             row.add(checkBox, BorderLayout.WEST);
-            row.add(smallLabel(task.getTitle(), 9, TEXT), BorderLayout.CENTER);
+            row.add(titleLabel, BorderLayout.CENTER);
+
+            JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+            actions.setOpaque(false);
             if (!task.getDueDate().isBlank()) {
                 JLabel due = new JLabel(task.getDueDate(), SwingConstants.CENTER);
                 due.setFont(new Font("SansSerif", Font.PLAIN, 8));
@@ -435,12 +401,18 @@ public class StudentDashboardFrame {
                 due.setOpaque(true);
                 due.setBackground(new Color(255, 226, 220));
                 due.setBorder(BorderFactory.createEmptyBorder(3, 6, 3, 6));
-                row.add(due, BorderLayout.EAST);
+                actions.add(due);
             }
+            JButton removeButton = actionButton("Remove", null);
+            removeButton.addActionListener(event -> {
+                taskModel.removeElement(task);
+            });
+            actions.add(removeButton);
+            row.add(actions, BorderLayout.EAST);
             rows.add(row);
         }
-        card.add(rows, BorderLayout.CENTER);
-        return card;
+        rows.revalidate();
+        rows.repaint();
     }
 
     private JPanel sectionTitle(String title, IconType iconType, Color iconColor) {
@@ -471,7 +443,9 @@ public class StudentDashboardFrame {
         button.setFocusPainted(false);
         button.setMargin(new Insets(1, 2, 1, 2));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        button.addActionListener(event -> action.run());
+        if (action != null) {
+            button.addActionListener(event -> action.run());
+        }
         return button;
     }
 

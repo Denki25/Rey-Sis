@@ -15,6 +15,15 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
+import javax.swing.JTable;
+import javax.swing.JDialog;
+import javax.swing.JCheckBox;
+import javax.swing.DefaultCellEditor;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellEditor;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.event.TableModelEvent;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -36,6 +45,7 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntConsumer;
 
 public class StudentEnrollmentFrame {
     private static final Color DEEP_GREEN = new Color(0, 59, 44);
@@ -51,12 +61,23 @@ public class StudentEnrollmentFrame {
 
     private final JFrame window = new JFrame("REY SIS | Enrollment");
     private final Student student;
+    private final DefaultTableModel selectedSubjectsModel = new DefaultTableModel(
+            new Object[]{"CODE", "COURSE TITLE", "UNITS", "ACTION"}, 0) {
+        public boolean isCellEditable(int row, int column) {
+            return column == 3;
+        }
+    };
+    private final List<String> passedCourses = List.of("COMSCI 2100", "INTECH 1100", "MATH 1100", "SOCSCI 1100", "PATHFIT 1");
     private final List<SubjectRowData> selectedSubjects = new ArrayList<>();
 
     private JLabel totalSubjectsLabel;
     private JLabel totalUnitsLabel;
     private JLabel estimatedTuitionLabel;
+    private JTable subjectsTable;
     private JPanel subjectsTableContainer;
+    private JButton addSubjectButton;
+    private JButton browseSubjectsButton;
+    private JButton continueButton;
 
     public StudentEnrollmentFrame(Student student) {
         this.student = student;
@@ -74,11 +95,17 @@ public class StudentEnrollmentFrame {
     }
 
     private void initDefaultSubjects() {
-        selectedSubjects.add(new SubjectRowData("COMSCI 2100", "Object-Oriented Programming", 3));
-        selectedSubjects.add(new SubjectRowData("INTECH 1100", "Discrete Mathematics", 3));
-        selectedSubjects.add(new SubjectRowData("MATH 1100", "Mathematics in the Modern World", 3));
-        selectedSubjects.add(new SubjectRowData("SOCSCI 1100", "Ethics", 3));
-        selectedSubjects.add(new SubjectRowData("PATHFIT 1", "Movement Competency Training", 2));
+        selectedSubjectsModel.addRow(new Object[]{"COMSCI 2100", "Object-Oriented Programming", 3, "Remove"});
+        selectedSubjectsModel.addRow(new Object[]{"INTECH 1100", "Discrete Mathematics", 3, "Remove"});
+        selectedSubjectsModel.addRow(new Object[]{"MATH 1100", "Mathematics in the Modern World", 3, "Remove"});
+        selectedSubjectsModel.addRow(new Object[]{"SOCSCI 1100", "Ethics", 3, "Remove"});
+        selectedSubjectsModel.addRow(new Object[]{"PATHFIT 1", "Movement Competency Training", 2, "Remove"});
+        selectedSubjectsModel.addTableModelListener(event -> {
+            if (event.getType() == TableModelEvent.INSERT || event.getType() == TableModelEvent.DELETE
+                    || event.getType() == TableModelEvent.UPDATE) {
+                updateSummary();
+            }
+        });
     }
 
     private JPanel createContent() {
@@ -138,9 +165,6 @@ public class StudentEnrollmentFrame {
         navigation.add(createNavigationButton("Enrollment", StudentDashboardFrame.IconType.ENROLLMENT, true));
         navigation.add(createNavigationButton("My Schedule", StudentDashboardFrame.IconType.CALENDAR, false));
         navigation.add(createNavigationButton("Grades", StudentDashboardFrame.IconType.GRADES, false));
-        navigation.add(createNavigationButton("Academic Records", StudentDashboardFrame.IconType.RECORDS, false));
-        navigation.add(createNavigationButton("Requests", StudentDashboardFrame.IconType.REQUESTS, false));
-        navigation.add(createNavigationButton("Notifications", StudentDashboardFrame.IconType.BELL, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -180,6 +204,9 @@ public class StudentEnrollmentFrame {
                 } else if (text.equals("Grades")) {
                     window.dispose();
                     new StudentGradesFrame(student).showWindow();
+                } else if (text.equals("My Schedule")) {
+                    window.dispose();
+                    new StudentScheduleFrame(student).showWindow();
                 }else if (text.equals("Requests")) {
                     window.dispose();
                     new StudentRequestFrame(student).showWindow(); // <--- Add this routing
@@ -265,6 +292,7 @@ public class StudentEnrollmentFrame {
         userBadge.add(userText);
 
         rightControls.add(userBadge);
+        rightControls.removeAll();
         header.add(rightControls, BorderLayout.EAST);
 
         return header;
@@ -327,67 +355,24 @@ public class StudentEnrollmentFrame {
         titleGrp.add(titleText);
         cardHeader.add(titleGrp, BorderLayout.WEST);
 
-        JButton addSubjectBtn = new JButton("+ Add Subject");
-        addSubjectBtn.setFont(new Font("SansSerif", Font.BOLD, 10));
-        addSubjectBtn.setForeground(Color.WHITE);
-        addSubjectBtn.setBackground(DEEP_GREEN);
-        addSubjectBtn.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
-        addSubjectBtn.setFocusPainted(false);
-        addSubjectBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        addSubjectBtn.addActionListener(e -> promptAddSubject());
-        cardHeader.add(addSubjectBtn, BorderLayout.EAST);
+        addSubjectButton = new JButton("+ Add Subject");
+        addSubjectButton.setFont(new Font("SansSerif", Font.BOLD, 10));
+        addSubjectButton.setForeground(Color.WHITE);
+        addSubjectButton.setBackground(DEEP_GREEN);
+        addSubjectButton.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
+        addSubjectButton.setFocusPainted(false);
+        addSubjectButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addSubjectButton.addActionListener(e -> promptAddSubject());
+        cardHeader.add(addSubjectButton, BorderLayout.EAST);
 
         mainCard.add(cardHeader, BorderLayout.NORTH);
 
-        subjectsTableContainer = new JPanel();
-        subjectsTableContainer.setOpaque(false);
-        subjectsTableContainer.setLayout(new BoxLayout(subjectsTableContainer, BoxLayout.Y_AXIS));
-        renderSubjectsTable();
-
-        mainCard.add(subjectsTableContainer, BorderLayout.CENTER);
+        subjectsTable = createSubjectsTable();
+        JScrollPane subjectsScrollPane = new JScrollPane(subjectsTable);
+        subjectsScrollPane.setBorder(BorderFactory.createLineBorder(BORDER));
+        subjectsScrollPane.setPreferredSize(new Dimension(0, 290));
+        mainCard.add(subjectsScrollPane, BorderLayout.CENTER);
         left.add(mainCard);
-
-        left.add(Box.createVerticalStrut(14));
-
-        // Suggested / Additional Subject Row
-        CardPanel suggestedCard = new CardPanel(Color.WHITE);
-        suggestedCard.setLayout(new BorderLayout());
-        suggestedCard.setBorder(BorderFactory.createEmptyBorder(12, 20, 12, 20));
-
-        JPanel row = new JPanel(new GridBagLayout());
-        row.setOpaque(false);
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-
-        JLabel cCode = new JLabel("PATHFIT 1");
-        cCode.setFont(new Font("SansSerif", Font.BOLD, 10));
-        cCode.setForeground(TEXT);
-        gbc.gridx = 0; gbc.weightx = 0.22; row.add(cCode, gbc);
-
-        JLabel cTitle = new JLabel("Movement Competency Training");
-        cTitle.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        cTitle.setForeground(TEXT);
-        gbc.gridx = 1; gbc.weightx = 0.48; row.add(cTitle, gbc);
-
-        JLabel cUnits = new JLabel("2", SwingConstants.CENTER);
-        cUnits.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        cUnits.setForeground(TEXT);
-        gbc.gridx = 2; gbc.weightx = 0.15; row.add(cUnits, gbc);
-
-        JLabel addIcon = new JLabel(new VectorIcon(VectorIcon.Type.PLUS_SQUARE, DEEP_GREEN), SwingConstants.CENTER);
-        addIcon.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        addIcon.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                selectedSubjects.add(new SubjectRowData("PATHFIT 1", "Movement Competency Training", 2));
-                renderSubjectsTable();
-                updateSummary();
-            }
-        });
-        gbc.gridx = 3; gbc.weightx = 0.15; row.add(addIcon, gbc);
-
-        suggestedCard.add(row, BorderLayout.CENTER);
-        left.add(suggestedCard);
 
         left.add(Box.createVerticalStrut(14));
 
@@ -417,6 +402,7 @@ public class StudentEnrollmentFrame {
 
         JButton browseBtn = new JButton("Browse Subjects  →");
         browseBtn.setFont(new Font("SansSerif", Font.BOLD, 10));
+        browseSubjectsButton = browseBtn;
         browseBtn.setForeground(GOLD);
         browseBtn.setBackground(Color.WHITE);
         browseBtn.setBorder(BorderFactory.createCompoundBorder(
@@ -431,6 +417,43 @@ public class StudentEnrollmentFrame {
         left.add(searchCard);
 
         return left;
+    }
+
+    private JTable createSubjectsTable() {
+        JTable table = new JTable(selectedSubjectsModel);
+        table.setRowHeight(42);
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new Dimension(0, 1));
+        table.setFillsViewportHeight(true);
+        table.setSelectionBackground(new Color(235, 244, 239));
+        table.setSelectionForeground(TEXT);
+        table.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 9));
+        table.getTableHeader().setForeground(MUTED);
+        table.getTableHeader().setBackground(Color.WHITE);
+        table.getTableHeader().setReorderingAllowed(false);
+
+        DefaultTableCellRenderer leftRenderer = new DefaultTableCellRenderer();
+        leftRenderer.setHorizontalAlignment(SwingConstants.LEFT);
+        leftRenderer.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 8));
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+        centerRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+        table.getColumnModel().getColumn(0).setCellRenderer(leftRenderer);
+        table.getColumnModel().getColumn(1).setCellRenderer(leftRenderer);
+        table.getColumnModel().getColumn(2).setCellRenderer(centerRenderer);
+        table.getColumnModel().getColumn(3).setCellRenderer(new TableActionRenderer());
+        table.getColumnModel().getColumn(3).setCellEditor(new TableActionEditor(new JCheckBox(), this::removeSelectedSubject));
+        table.getColumnModel().getColumn(0).setPreferredWidth(125);
+        table.getColumnModel().getColumn(1).setPreferredWidth(330);
+        table.getColumnModel().getColumn(2).setPreferredWidth(70);
+        table.getColumnModel().getColumn(3).setPreferredWidth(90);
+        return table;
+    }
+
+    private void removeSelectedSubject(int row) {
+        if (row >= 0 && row < selectedSubjectsModel.getRowCount()) {
+            selectedSubjectsModel.removeRow(row);
+        }
     }
 
     private void renderSubjectsTable() {
@@ -546,7 +569,7 @@ public class StudentEnrollmentFrame {
         innerSummary.setLayout(new GridLayout(3, 1, 0, 10));
         innerSummary.setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
 
-        totalSubjectsLabel = new JLabel(String.valueOf(selectedSubjects.size()), SwingConstants.RIGHT);
+        totalSubjectsLabel = new JLabel(String.valueOf(selectedSubjectsModel.getRowCount()), SwingConstants.RIGHT);
         totalSubjectsLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
         totalSubjectsLabel.setForeground(TEXT);
 
@@ -633,12 +656,13 @@ public class StudentEnrollmentFrame {
 
         JButton continueBtn = new JButton("Continue to Assessment  →");
         continueBtn.setFont(new Font("SansSerif", Font.BOLD, 10));
+        continueButton = continueBtn;
         continueBtn.setForeground(Color.WHITE);
         continueBtn.setBackground(DEEP_GREEN);
         continueBtn.setBorder(BorderFactory.createEmptyBorder(9, 14, 9, 14));
         continueBtn.setFocusPainted(false);
         continueBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        continueBtn.addActionListener(e -> JOptionPane.showMessageDialog(window, "Proceeding to Assessment section.", "REY SIS", JOptionPane.INFORMATION_MESSAGE));
+        continueBtn.addActionListener(e -> openAssessment());
 
         actions.add(saveDraftBtn);
         actions.add(continueBtn);
@@ -669,34 +693,132 @@ public class StudentEnrollmentFrame {
 
     private int calculateTotalUnits() {
         int sum = 0;
-        for (SubjectRowData data : selectedSubjects) {
-            sum += data.units;
+        for (int row = 0; row < selectedSubjectsModel.getRowCount(); row++) {
+            sum += ((Number) selectedSubjectsModel.getValueAt(row, 2)).intValue();
         }
         return sum;
     }
 
     private double calculateTuition() {
-        return calculateTotalUnits() * 2000.0;
+        return calculateTotalUnits() * 1800.0;
     }
 
     private void updateSummary() {
         if (totalSubjectsLabel != null) {
-            totalSubjectsLabel.setText(String.valueOf(selectedSubjects.size()));
+            totalSubjectsLabel.setText(String.valueOf(selectedSubjectsModel.getRowCount()));
             totalUnitsLabel.setText(String.valueOf(calculateTotalUnits()));
             estimatedTuitionLabel.setText(String.format("₱ %,.2f", calculateTuition()));
         }
     }
 
     private void promptAddSubject() {
-        String code = JOptionPane.showInputDialog(window, "Enter Course Code (e.g. INTECH 2200):", "Add Subject", JOptionPane.PLAIN_MESSAGE);
-        if (code != null && !code.isBlank()) {
-            String title = JOptionPane.showInputDialog(window, "Enter Course Title:", "Add Subject", JOptionPane.PLAIN_MESSAGE);
-            if (title != null && !title.isBlank()) {
-                selectedSubjects.add(new SubjectRowData(code.trim(), title.trim(), 3));
-                renderSubjectsTable();
-                updateSummary();
+        openAvailableSubjectsDialog();
+    }
+
+    private void openAssessment() {
+        if (selectedSubjectsModel.getRowCount() == 0) {
+            JOptionPane.showMessageDialog(window,
+                    "Please select at least one subject before proceeding to Assessment.",
+                    "No Subjects Selected", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        List<AssessmentDialog.SubjectLine> subjects = new ArrayList<>();
+        for (int row = 0; row < selectedSubjectsModel.getRowCount(); row++) {
+            subjects.add(new AssessmentDialog.SubjectLine(
+                    String.valueOf(selectedSubjectsModel.getValueAt(row, 0)),
+                    String.valueOf(selectedSubjectsModel.getValueAt(row, 1)),
+                    ((Number) selectedSubjectsModel.getValueAt(row, 2)).intValue()));
+        }
+        AssessmentDialog dialog = new AssessmentDialog(window, student, subjects,
+                calculateTotalUnits(), calculateTuition(), this::markEnrollmentSubmitted);
+        dialog.setVisible(true);
+    }
+
+    private void markEnrollmentSubmitted() {
+        subjectsTable.setEnabled(false);
+        addSubjectButton.setEnabled(false);
+        browseSubjectsButton.setEnabled(false);
+        continueButton.setEnabled(false);
+    }
+
+    private void openAvailableSubjectsDialog() {
+        List<AvailableSubject> availableSubjects = List.of(
+                new AvailableSubject("COMSCI 2200", "Data Structures and Algorithms", 3, "COMSCI 2100"),
+                new AvailableSubject("INTECH 1200", "Web Systems and Technologies", 3, "INTECH 1100"),
+                new AvailableSubject("MATH 1200", "Statistics for Computing", 3, "MATH 1100"),
+                new AvailableSubject("PATHFIT 2", "Exercise and Sports", 2, "PATHFIT 1")
+        );
+        JDialog dialog = new JDialog(window, "Available Subjects", true);
+        dialog.setLayout(new BorderLayout(0, 12));
+        dialog.setMinimumSize(new Dimension(760, 360));
+        dialog.setSize(820, 430);
+        dialog.setLocationRelativeTo(window);
+
+        JLabel heading = new JLabel("Available Subjects");
+        heading.setFont(new Font("Serif", Font.BOLD, 20));
+        heading.setForeground(TEXT);
+        heading.setBorder(BorderFactory.createEmptyBorder(16, 18, 0, 18));
+        dialog.add(heading, BorderLayout.NORTH);
+
+        DefaultTableModel availableModel = new DefaultTableModel(
+                new Object[]{"CODE", "COURSE TITLE", "UNITS", "PREREQUISITES", "ACTION"}, 0) {
+            public boolean isCellEditable(int row, int column) { return column == 4; }
+        };
+        for (AvailableSubject subject : availableSubjects) {
+            availableModel.addRow(new Object[]{subject.code, subject.title, subject.units, subject.prerequisite, "Add"});
+        }
+        JTable availableTable = new JTable(availableModel);
+        availableTable.setRowHeight(40);
+        availableTable.setShowGrid(false);
+        availableTable.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        availableTable.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 9));
+        availableTable.getTableHeader().setForeground(MUTED);
+        availableTable.getTableHeader().setReorderingAllowed(false);
+        DefaultTableCellRenderer left = new DefaultTableCellRenderer();
+        left.setHorizontalAlignment(SwingConstants.LEFT);
+        left.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 6));
+        DefaultTableCellRenderer centered = new DefaultTableCellRenderer();
+        centered.setHorizontalAlignment(SwingConstants.CENTER);
+        availableTable.getColumnModel().getColumn(0).setCellRenderer(left);
+        availableTable.getColumnModel().getColumn(1).setCellRenderer(left);
+        availableTable.getColumnModel().getColumn(2).setCellRenderer(centered);
+        availableTable.getColumnModel().getColumn(3).setCellRenderer(left);
+        availableTable.getColumnModel().getColumn(4).setCellRenderer(new TableActionRenderer());
+        availableTable.getColumnModel().getColumn(4).setCellEditor(new TableActionEditor(new JCheckBox(), row -> {
+            addAvailableSubject(availableSubjects.get(row));
+            if (dialog.isDisplayable()) {
+                dialog.dispose();
+            }
+        }));
+        JScrollPane scrollPane = new JScrollPane(availableTable);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 18));
+        dialog.add(scrollPane, BorderLayout.CENTER);
+
+        JButton close = new JButton("Close");
+        close.addActionListener(event -> dialog.dispose());
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        footer.setBorder(BorderFactory.createEmptyBorder(0, 12, 10, 18));
+        footer.add(close);
+        dialog.add(footer, BorderLayout.SOUTH);
+        dialog.setVisible(true);
+    }
+
+    private void addAvailableSubject(AvailableSubject subject) {
+        for (int row = 0; row < selectedSubjectsModel.getRowCount(); row++) {
+            if (subject.code.equalsIgnoreCase(String.valueOf(selectedSubjectsModel.getValueAt(row, 0)))) {
+                JOptionPane.showMessageDialog(window, "This subject is already selected.", "Cannot Add Subject", JOptionPane.WARNING_MESSAGE);
+                return;
             }
         }
+        if (calculateTotalUnits() + subject.units > 24) {
+            JOptionPane.showMessageDialog(window, "You cannot exceed the 24-unit semester limit.", "Cannot Add Subject", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (!subject.prerequisite.isBlank() && !passedCourses.contains(subject.prerequisite)) {
+            JOptionPane.showMessageDialog(window, "Prerequisite required: " + subject.prerequisite, "Cannot Add Subject", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        selectedSubjectsModel.addRow(new Object[]{subject.code, subject.title, subject.units, "Remove"});
     }
 
     private void openDashboard() {
@@ -727,6 +849,67 @@ public class StudentEnrollmentFrame {
             return stream == null ? null : ImageIO.read(stream);
         } catch (Exception exception) {
             return null;
+        }
+    }
+
+    private static class AvailableSubject {
+        private final String code;
+        private final String title;
+        private final int units;
+        private final String prerequisite;
+
+        private AvailableSubject(String code, String title, int units, String prerequisite) {
+            this.code = code;
+            this.title = title;
+            this.units = units;
+            this.prerequisite = prerequisite;
+        }
+    }
+
+    private static class TableActionRenderer extends JButton implements TableCellRenderer {
+        TableActionRenderer() {
+            setFont(new Font("SansSerif", Font.BOLD, 10));
+            setForeground(DEEP_GREEN);
+            setBackground(new Color(232, 242, 236));
+            setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+            setFocusPainted(false);
+        }
+
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
+                                                        boolean focused, int row, int column) {
+            setText(String.valueOf(value));
+            return this;
+        }
+    }
+
+    private static class TableActionEditor extends DefaultCellEditor implements TableCellEditor {
+        private final JButton button = new JButton();
+        private final IntConsumer action;
+        private int row;
+
+        TableActionEditor(JCheckBox checkBox, IntConsumer action) {
+            super(checkBox);
+            this.action = action;
+            button.setFont(new Font("SansSerif", Font.BOLD, 10));
+            button.setForeground(DEEP_GREEN);
+            button.setBackground(new Color(232, 242, 236));
+            button.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+            button.setFocusPainted(false);
+            button.addActionListener(event -> {
+                fireEditingStopped();
+                action.accept(row);
+            });
+        }
+
+        public Component getTableCellEditorComponent(JTable table, Object value, boolean selected,
+                                                     int row, int column) {
+            this.row = table.convertRowIndexToModel(row);
+            button.setText(String.valueOf(value));
+            return button;
+        }
+
+        public Object getCellEditorValue() {
+            return button.getText();
         }
     }
 

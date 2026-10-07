@@ -36,6 +36,7 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.prefs.Preferences;
 
 import javax.imageio.ImageIO;
 
@@ -44,13 +45,16 @@ public class LoginFrame {
     private static final Color GOLD = new Color(207, 160, 48);
     private static final Color TEXT = new Color(22, 30, 45);
     private static final Color MUTED = new Color(125, 135, 151);
+    private static final String REMEMBERED_USERNAME_KEY = "rememberedUsername";
 
     private final JFrame window = new JFrame("REY SIS | Login");
+    private final Preferences preferences = Preferences.userNodeForPackage(LoginFrame.class);
     private final PromptTextField usernameField = new PromptTextField("Enter your username");
     private final PromptPasswordField passwordField = new PromptPasswordField("Enter your password");
     private final JCheckBox rememberMe = new JCheckBox("Remember me");
 
     public LoginFrame() {
+        loadRememberedUsername();
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(960, 620));
         window.setSize(1200, 760);
@@ -194,6 +198,11 @@ public class LoginFrame {
         rememberMe.setForeground(new Color(66, 74, 87));
         rememberMe.setOpaque(false);
         rememberMe.setFocusPainted(false);
+        rememberMe.addActionListener(event -> {
+            if (!rememberMe.isSelected()) {
+                preferences.remove(REMEMBERED_USERNAME_KEY);
+            }
+        });
         JButton forgotButton = new JButton("Forgot password?");
         forgotButton.setFont(new Font("SansSerif", Font.PLAIN, 11));
         forgotButton.setForeground(new Color(181, 133, 25));
@@ -258,7 +267,30 @@ public class LoginFrame {
             showMessage("Invalid username or password.");
         }
 
+        boolean validCredentials = username.equalsIgnoreCase("admin") && password.equals("admin123")
+                || username.equalsIgnoreCase("cashier") && password.equals("cashier123")
+                || username.equalsIgnoreCase("student") && password.equals("student123");
+        if (validCredentials) {
+            saveRememberedUsername(username);
+        }
+
         Arrays.fill(passwordChars, '0');
+    }
+
+    private void loadRememberedUsername() {
+        String rememberedUsername = preferences.get(REMEMBERED_USERNAME_KEY, "");
+        if (!rememberedUsername.isBlank()) {
+            usernameField.setText(rememberedUsername);
+            rememberMe.setSelected(true);
+        }
+    }
+
+    private void saveRememberedUsername(String username) {
+        if (rememberMe.isSelected()) {
+            preferences.put(REMEMBERED_USERNAME_KEY, username);
+        } else {
+            preferences.remove(REMEMBERED_USERNAME_KEY);
+        }
     }
 
     private void showMessage(String message) {

@@ -132,9 +132,6 @@ public class StudentRequestFrame {
         navigation.add(createNavigationButton("Enrollment", StudentDashboardFrame.IconType.ENROLLMENT, false));
         navigation.add(createNavigationButton("My Schedule", StudentDashboardFrame.IconType.CALENDAR, false));
         navigation.add(createNavigationButton("Grades", StudentDashboardFrame.IconType.GRADES, false));
-        navigation.add(createNavigationButton("Academic Records", StudentDashboardFrame.IconType.RECORDS, false));
-        navigation.add(createNavigationButton("Requests", StudentDashboardFrame.IconType.REQUESTS, true));
-        navigation.add(createNavigationButton("Notifications", StudentDashboardFrame.IconType.BELL, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -169,6 +166,10 @@ public class StudentRequestFrame {
                 else if (text.equals("My Profile")) openProfile();
                 else if (text.equals("Enrollment")) openEnrollment();
                 else if (text.equals("Grades")) openGrades();
+                else if (text.equals("My Schedule")) {
+                    window.dispose();
+                    new StudentScheduleFrame(student).showWindow();
+                }
                 else if (text.equals("Requests")) showRequestsMessage();
                 else showComingSoon(text);
             });
