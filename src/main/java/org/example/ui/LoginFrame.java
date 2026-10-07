@@ -8,7 +8,6 @@ import org.example.model.User;
 import org.example.ui.views.admin.AdminDashboardFrame;
 import org.example.ui.views.cashier.CashierDashboardFrame;
 import org.example.ui.views.student.StudentDashboardFrame;
-import org.example.ui.views.teacher.TeacherDashboardFrame;
 import org.example.model.Cashier;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -288,9 +287,6 @@ public class LoginFrame {
             }
             window.dispose();
             new StudentDashboardFrame(student).showWindow();
-        } else if ("TEACHER".equals(role)) {
-            window.dispose();
-            new TeacherDashboardFrame().showWindow();
         } else if ("ADMIN".equals(role) || "REGISTRAR".equals(role)) {
             window.dispose();
             new AdminDashboardFrame().showWindow();

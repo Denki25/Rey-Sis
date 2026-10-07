@@ -2,6 +2,8 @@ package org.example.ui.views.admin;
 
 import org.example.data.DashboardStatisticsRepository;
 import org.example.data.StudentDirectoryRepository;
+import org.example.auth.UserSession;
+import org.example.model.User;
 import org.example.service.AdminStudentService;
 import org.example.ui.LoginFrame;
 
@@ -27,21 +29,17 @@ public class AdminDashboardFrame {
     private static final Color STAT_YELLOW_BG = new Color(253, 248, 237);
     private final JFrame window = new JFrame("REY SIS | Admin Dashboard");
     private final DefaultListModel<String> taskModel = new DefaultListModel<>();
-    private String adminName = "Dr. Maria Santos";
-    private String adminRole = "Chief Registrar";
-    private JLabel adminHeaderName;
-    private JLabel adminHeaderRole;
+    private final User adminUser;
     private DashboardStatisticsRepository.DashboardStatistics statistics;
     private final AdminStudentService studentService = new AdminStudentService();
 
     public AdminDashboardFrame() {
-        taskModel.addElement("Clear pending IT validations");
-        taskModel.addElement("Merge overlapping BSCE sections");
-        taskModel.addElement("Export weekly enrollment audit report");
+        adminUser = requireAdminUser();
         try {
             statistics = new DashboardStatisticsRepository().find();
         } catch (java.sql.SQLException exception) {
-            statistics = new DashboardStatisticsRepository.DashboardStatistics(0, 0, 0, 0);
+            JOptionPane.showMessageDialog(null, "Unable to load dashboard statistics from the database.",
+                    "Dashboard Error", JOptionPane.ERROR_MESSAGE);
         }
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1280, 800));
@@ -70,6 +68,15 @@ public class AdminDashboardFrame {
 
         content.add(main, BorderLayout.CENTER);
         return content;
+    }
+
+    private User requireAdminUser() {
+        User user = UserSession.getCurrentUser();
+        if (user == null || (!"ADMIN".equalsIgnoreCase(user.getRole())
+                && !"REGISTRAR".equalsIgnoreCase(user.getRole()))) {
+            throw new IllegalStateException("An authenticated Admin account is required.");
+        }
+        return user;
     }
 
     private JPanel createSidebar() {
@@ -189,7 +196,7 @@ public class AdminDashboardFrame {
         right.add(bellWrapper);
 
         // Profile Avatar
-        JLabel avatar = new JLabel("MS", SwingConstants.CENTER);
+        JLabel avatar = new JLabel(initials(adminUser.getUsername()), SwingConstants.CENTER);
         avatar.setFont(new Font("SansSerif", Font.BOLD, 12));
         avatar.setForeground(Color.WHITE);
         avatar.setOpaque(true);
@@ -209,10 +216,10 @@ public class AdminDashboardFrame {
         avatarPanel.setLayout(new BorderLayout());
         avatarPanel.setPreferredSize(new Dimension(36, 36));
         avatarPanel.setOpaque(false);
-        JLabel ms = new JLabel("MS", SwingConstants.CENTER);
-        ms.setForeground(Color.WHITE);
-        ms.setFont(new Font("SansSerif", Font.BOLD, 14));
-        avatarPanel.add(ms, BorderLayout.CENTER);
+        JLabel initials = new JLabel(initials(adminUser.getUsername()), SwingConstants.CENTER);
+        initials.setForeground(Color.WHITE);
+        initials.setFont(new Font("SansSerif", Font.BOLD, 14));
+        avatarPanel.add(initials, BorderLayout.CENTER);
         right.add(avatarPanel);
 
         // Profile Text
@@ -220,13 +227,11 @@ public class AdminDashboardFrame {
         profileText.setLayout(new BoxLayout(profileText, BoxLayout.Y_AXIS));
         profileText.setOpaque(false);
 
-        adminHeaderName = new JLabel(adminName);
-        JLabel name = adminHeaderName;
+        JLabel name = new JLabel(adminUser.getUsername());
         name.setFont(new Font("SansSerif", Font.BOLD, 13));
         name.setForeground(TEXT_DARK);
 
-        adminHeaderRole = new JLabel(adminRole + " - 99-001");
-        JLabel role = adminHeaderRole;
+        JLabel role = new JLabel(adminUser.getRole() + " - ID " + adminUser.getUserId());
         role.setFont(new Font("SansSerif", Font.PLAIN, 11));
         role.setForeground(TEXT_MUTED);
 
@@ -253,7 +258,7 @@ public class AdminDashboardFrame {
         // Welcome Banner
         gbc.gridy = 0;
         gbc.insets = new Insets(0, 0, 30, 0);
-        body.add(new WelcomeBanner(), gbc);
+        body.add(new WelcomeBanner(adminUser.getUsername()), gbc);
 
         // Quick Stats
         gbc.gridy = 1;
@@ -271,12 +276,23 @@ public class AdminDashboardFrame {
         JPanel stats = new JPanel(new GridLayout(1, 4, 20, 0));
         stats.setOpaque(false);
 
-        stats.add(createStatCard("Total Students", String.valueOf(statistics.totalStudents()), IconType.USER_OUTLINE, SIDEBAR_BG, STAT_GREEN_BG));
-        stats.add(createStatCard("Total Enrolled", String.valueOf(statistics.enrolledStudents()), IconType.DOCUMENT, SIDEBAR_BG, STAT_YELLOW_BG));
-        stats.add(createStatCard("Total Courses", String.valueOf(statistics.totalCourses()), IconType.GRID, SIDEBAR_BG, STAT_GREEN_BG));
-        stats.add(createStatCard("Active Users", String.valueOf(statistics.activeUsers()), IconType.CHECK, SIDEBAR_BG, STAT_YELLOW_BG));
+        stats.add(createStatCard("Total Students", statisticValue(StatisticsValue.TOTAL_STUDENTS), IconType.USER_OUTLINE, SIDEBAR_BG, STAT_GREEN_BG));
+        stats.add(createStatCard("Total Enrollments", statisticValue(StatisticsValue.TOTAL_ENROLLMENTS), IconType.DOCUMENT, SIDEBAR_BG, STAT_YELLOW_BG));
+        stats.add(createStatCard("Total Courses", statisticValue(StatisticsValue.TOTAL_COURSES), IconType.GRID, SIDEBAR_BG, STAT_GREEN_BG));
+        stats.add(createStatCard("Active Users", statisticValue(StatisticsValue.ACTIVE_USERS), IconType.CHECK, SIDEBAR_BG, STAT_YELLOW_BG));
 
         return stats;
+    }
+
+    private String statisticValue(StatisticsValue value) {
+        if (statistics == null) return "Unavailable";
+        return switch (value) {
+            case TOTAL_STUDENTS -> String.valueOf(statistics.totalStudents());
+            case TOTAL_ENROLLMENTS -> String.valueOf(statistics.totalEnrollments());
+            case ENROLLED_STUDENTS -> String.valueOf(statistics.enrolledStudents());
+            case TOTAL_COURSES -> String.valueOf(statistics.totalCourses());
+            case ACTIVE_USERS -> String.valueOf(statistics.activeUsers());
+        };
     }
 
     private JPanel createStatCard(String title, String value, IconType iconType, Color iconColor, Color bgColor) {
@@ -461,7 +477,7 @@ public class AdminDashboardFrame {
         // Admin Info Header
         gbc.gridy = 0;
         gbc.insets = new Insets(0, 0, 15, 0);
-        right.add(createSectionHeader("Admin Info", "Edit Profile"), gbc);
+        right.add(createSectionHeader("Admin Info", null), gbc);
 
         // Admin Info Box
         gbc.gridy = 1;
@@ -513,8 +529,6 @@ public class AdminDashboardFrame {
                     window.dispose();
                     new AdminValidationFrame().showWindow();
                 });
-            } else if (action.equals("Edit Profile")) {
-                a.addActionListener(event -> showEditProfileDialog());
             }
             header.add(a, BorderLayout.EAST);
         }
@@ -621,28 +635,6 @@ public class AdminDashboardFrame {
         JOptionPane.showMessageDialog(window, details, "Review Student Load", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private void showEditProfileDialog() {
-        JTextField nameField = new JTextField(adminName);
-        JTextField roleField = new JTextField(adminRole);
-        JPanel form = new JPanel(new GridLayout(2, 2, 8, 8));
-        form.add(new JLabel("Name:"));
-        form.add(nameField);
-        form.add(new JLabel("Role:"));
-        form.add(roleField);
-        int result = JOptionPane.showConfirmDialog(window, form, "Edit Admin Profile",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (result == JOptionPane.OK_OPTION
-                && !nameField.getText().trim().isEmpty()
-                && !roleField.getText().trim().isEmpty()) {
-            adminName = nameField.getText().trim();
-            adminRole = roleField.getText().trim();
-            adminHeaderName.setText(adminName);
-            adminHeaderRole.setText(adminRole + " - 99-001");
-            JOptionPane.showMessageDialog(window, "Admin profile changes saved for this session.",
-                    "Profile Updated", JOptionPane.INFORMATION_MESSAGE);
-        }
-    }
-
     private JPanel createAnnouncement(String text, String date) {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
@@ -726,9 +718,9 @@ public class AdminDashboardFrame {
 
         gbc.gridheight = 1; gbc.weightx = 0.4; gbc.insets = new Insets(6, 0, 6, 0);
 
-        addInfoRow(panel, "Admin ID", "99-001", 0, gbc);
-        addInfoRow(panel, "Role", adminRole, 1, gbc);
-        addInfoRow(panel, "Term", "1st Sem, 2025", 2, gbc);
+        addInfoRow(panel, "Username", adminUser.getUsername(), 0, gbc);
+        addInfoRow(panel, "Role", adminUser.getRole(), 1, gbc);
+        addInfoRow(panel, "User ID", String.valueOf(adminUser.getUserId()), 2, gbc);
 
         return panel;
     }
@@ -753,7 +745,6 @@ public class AdminDashboardFrame {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
 
-        // The Custom Donut Chart
         JPanel chartView = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -762,34 +753,39 @@ public class AdminDashboardFrame {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
                 int size = Math.min(getWidth(), getHeight()) - 40;
+                if (size <= 0) {
+                    g2.dispose();
+                    return;
+                }
                 int x = (getWidth() - size) / 2;
                 int y = (getHeight() - size) / 2;
 
-                // Base background ring (30%)
                 g2.setColor(new Color(248, 241, 226));
                 g2.fillArc(x, y, size, size, 0, 360);
+                if (statistics != null && statistics.totalStudents() > 0) {
+                    double completion = Math.min(1.0,
+                            (double) statistics.enrolledStudents() / statistics.totalStudents());
+                    g2.setColor(SIDEBAR_BG);
+                    g2.fillArc(x, y, size, size, 90, (int) (-360 * completion));
+                }
 
-                // Completed ring (70%)
-                g2.setColor(SIDEBAR_BG);
-                g2.fillArc(x, y, size, size, 90, (int)(-360 * 0.70));
-
-                // Inner cutout
                 int innerSize = (int)(size * 0.75);
                 int ix = x + (size - innerSize) / 2;
                 int iy = y + (size - innerSize) / 2;
                 g2.setColor(PAGE_BG);
                 g2.fillOval(ix, iy, innerSize, innerSize);
 
-                // Text
                 g2.setColor(TEXT_DARK);
                 g2.setFont(new Font("SansSerif", Font.BOLD, 26));
-                String pct = "70%";
+                String pct = statistics == null ? "N/A"
+                        : statistics.totalStudents() == 0 ? "0%"
+                        : Math.round(100.0 * statistics.enrolledStudents() / statistics.totalStudents()) + "%";
                 int tx = x + (size - g2.getFontMetrics().stringWidth(pct)) / 2;
                 g2.drawString(pct, tx, y + size/2 + 5);
 
                 g2.setColor(TEXT_MUTED);
                 g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
-                String sub = "Complete";
+                String sub = "Enrolled";
                 int sx = x + (size - g2.getFontMetrics().stringWidth(sub)) / 2;
                 g2.drawString(sub, sx, y + size/2 + 20);
 
@@ -800,15 +796,21 @@ public class AdminDashboardFrame {
         chartView.setOpaque(false);
         panel.add(chartView, BorderLayout.CENTER);
 
-        // Legend
         JPanel legend = new JPanel();
         legend.setLayout(new BoxLayout(legend, BoxLayout.Y_AXIS));
         legend.setOpaque(false);
         legend.setBorder(new EmptyBorder(10, 20, 0, 0));
 
-        legend.add(createLegendItem("Enrolled (3.4k)", SIDEBAR_BG));
-        legend.add(Box.createVerticalStrut(8));
-        legend.add(createLegendItem("Pending (124)", GOLD));
+        if (statistics == null) {
+            legend.add(createLegendItem("Enrollment statistics unavailable", GOLD));
+        } else {
+            int totalStudents = statistics.totalStudents();
+            int enrolledStudents = statistics.enrolledStudents();
+            int notEnrolled = Math.max(0, totalStudents - enrolledStudents);
+            legend.add(createLegendItem("Enrolled (" + enrolledStudents + ")", SIDEBAR_BG));
+            legend.add(Box.createVerticalStrut(8));
+            legend.add(createLegendItem("Not enrolled (" + notEnrolled + ")", GOLD));
+        }
 
         panel.add(legend, BorderLayout.SOUTH);
         return panel;
@@ -840,10 +842,20 @@ public class AdminDashboardFrame {
         return p;
     }
 
+    private static String initials(String username) {
+        if (username == null || username.isBlank()) return "?";
+        String value = username.trim();
+        return value.substring(0, Math.min(2, value.length())).toUpperCase();
+    }
+
+    private enum StatisticsValue {
+        TOTAL_STUDENTS, TOTAL_ENROLLMENTS, ENROLLED_STUDENTS, TOTAL_COURSES, ACTIVE_USERS
+    }
+
     // --- Custom UI Components --- //
 
     private static class WelcomeBanner extends JPanel {
-        public WelcomeBanner() {
+        public WelcomeBanner(String username) {
             setOpaque(false);
             setPreferredSize(new Dimension(0, 140));
             setLayout(new BorderLayout());
@@ -857,7 +869,7 @@ public class AdminDashboardFrame {
             greeting.setFont(new Font("SansSerif", Font.BOLD, 14));
             greeting.setForeground(SIDEBAR_BG);
 
-            JLabel name = new JLabel("Admin Santos!");
+            JLabel name = new JLabel("Welcome, " + username + "!");
             name.setFont(new Font("SansSerif", Font.BOLD, 32));
             name.setForeground(SIDEBAR_BG);
 

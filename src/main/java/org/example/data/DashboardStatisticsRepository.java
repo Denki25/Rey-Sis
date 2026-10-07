@@ -8,6 +8,7 @@ import java.sql.SQLException;
 public final class DashboardStatisticsRepository {
     public DashboardStatistics find() throws SQLException {
         String sql = "SELECT (SELECT COUNT(*) FROM students) AS total_students, "
+                + "(SELECT COUNT(*) FROM enrollments) AS total_enrollments, "
                 + "(SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE status = 'ENROLLED' OR status IS NULL) AS enrolled_students, "
                 + "(SELECT COUNT(*) FROM courses) AS total_courses, "
                 + "(SELECT COUNT(*) FROM users WHERE is_active = TRUE) AS active_users";
@@ -15,11 +16,12 @@ public final class DashboardStatisticsRepository {
              PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet result = statement.executeQuery()) {
             result.next();
-            return new DashboardStatistics(result.getInt("total_students"), result.getInt("enrolled_students"),
-                    result.getInt("total_courses"), result.getInt("active_users"));
+            return new DashboardStatistics(result.getInt("total_students"), result.getInt("total_enrollments"),
+                    result.getInt("enrolled_students"), result.getInt("total_courses"), result.getInt("active_users"));
         }
     }
 
-    public record DashboardStatistics(int totalStudents, int enrolledStudents, int totalCourses, int activeUsers) {
+    public record DashboardStatistics(int totalStudents, int totalEnrollments, int enrolledStudents,
+                                      int totalCourses, int activeUsers) {
     }
 }
