@@ -1,7 +1,8 @@
 package org.example.ui.views.cashier;
 
-import org.example.ui.LoginFrame;
 import org.example.model.Cashier;
+import org.example.ui.LoginFrame;
+
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
@@ -18,11 +19,18 @@ public class CashierReportsFrame {
     private static final Color BORDER = new Color(234, 235, 231);
 
     private final JFrame window = new JFrame("REY SIS | Cashier - Reports");
+    private final Cashier cashier;
 
     public CashierReportsFrame() {
+        this(null);
+    }
+
+    public CashierReportsFrame(Cashier cashier) {
+        this.cashier = cashier;
+
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setMinimumSize(new Dimension(1160, 780));
-        window.setSize(1360, 860);
+        window.setSize(1360, 920);
         window.setLocationRelativeTo(null);
         window.setContentPane(createContent());
     }
@@ -36,8 +44,8 @@ public class CashierReportsFrame {
         content.add(createSidebar(), BorderLayout.WEST);
 
         JPanel main = new JPanel(new BorderLayout());
-        main.setBackground(PAGE);
-        main.add(createPageHeader(), BorderLayout.NORTH);
+        main.setBackground(Color.WHITE);
+        main.add(createTopNavigation(), BorderLayout.NORTH);
 
         JScrollPane scrollPane = new JScrollPane(createBody());
         scrollPane.setBorder(null);
@@ -127,40 +135,111 @@ public class CashierReportsFrame {
             if (active) return;
             window.dispose();
 
-            Cashier session = null;
-            try {
-                java.lang.reflect.Field field = this.getClass().getDeclaredField("cashier");
-                field.setAccessible(true);
-                session = (Cashier) field.get(this);
-            } catch (Exception ignored) {}
-
             switch (text) {
-                case "Dashboard" -> new CashierDashboardFrame(session).showWindow();
-                case "Collect Payment" -> new CashierCollectFrame(session).showWindow();
-                case "Transaction" -> new CashierTransacFrame(session).showWindow();
-                case "Student Accounts" -> new CashierStudentFrame(session).showWindow();
-                case "Reconciliation" -> new CashierReconsilationFrame(session).showWindow();
-                case "Reports" -> new CashierReportsFrame().showWindow();
+                case "Dashboard" -> new CashierDashboardFrame(cashier).showWindow();
+                case "Collect Payment" -> new CashierCollectFrame(cashier).showWindow();
+                case "Transaction" -> new CashierTransacFrame(cashier).showWindow();
+                case "Student Accounts" -> new CashierStudentFrame(cashier).showWindow();
+                case "Reconciliation" -> new CashierReconsilationFrame(cashier).showWindow();
+                case "Reports" -> new CashierReportsFrame(cashier).showWindow();
             }
         });
 
         return button;
     }
 
-    private JPanel createPageHeader() {
+    private JPanel createTopNavigation() {
         JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(PAGE);
-        header.setBorder(BorderFactory.createEmptyBorder(20, 28, 10, 28));
+        header.setBackground(Color.WHITE);
+        header.setBorder(BorderFactory.createEmptyBorder(12, 28, 12, 28));
+
+        JPanel searchPanel = new JPanel(new BorderLayout());
+        searchPanel.setOpaque(false);
+        searchPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER, 1, true),
+                BorderFactory.createEmptyBorder(6, 12, 6, 12)
+        ));
+
+        JLabel searchIcon = new JLabel(new VectorIcon(VectorIcon.Type.SEARCH, MUTED));
+        searchIcon.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
+        searchPanel.add(searchIcon, BorderLayout.WEST);
+
+        JTextField searchField = new JTextField("Search reports or keywords...");
+        searchField.setForeground(MUTED);
+        searchField.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        searchField.setBorder(null);
+        searchField.setOpaque(false);
+        searchField.setPreferredSize(new Dimension(350, 24));
+
+        searchField.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                if (searchField.getText().equals("Search reports or keywords...")) {
+                    searchField.setText("");
+                    searchField.setForeground(TEXT);
+                }
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                if (searchField.getText().isEmpty()) {
+                    searchField.setText("Search reports or keywords...");
+                    searchField.setForeground(MUTED);
+                }
+            }
+        });
+        searchPanel.add(searchField, BorderLayout.CENTER);
+
+        JPanel leftContainer = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        leftContainer.setOpaque(false);
+        leftContainer.add(searchPanel);
+        header.add(leftContainer, BorderLayout.WEST);
+
+        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 0));
+        rightControls.setOpaque(false);
+
+        JPanel userBadge = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        userBadge.setOpaque(false);
+
+        JLabel avatar = new JLabel(new VectorIcon(VectorIcon.Type.USER_AVATAR, MUTED));
+
+        JPanel userText = new JPanel();
+        userText.setOpaque(false);
+        userText.setLayout(new BoxLayout(userText, BoxLayout.Y_AXIS));
+        JLabel userName = new JLabel(cashier != null ? cashier.getName() : "Maria Santos");
+        userName.setFont(new Font("SansSerif", Font.BOLD, 12));
+        userName.setForeground(TEXT);
+        JLabel userSub = new JLabel("Finance Department · Cashier");
+        userSub.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        userSub.setForeground(MUTED);
+        userText.add(userName);
+        userText.add(userSub);
+        userBadge.add(avatar);
+        userBadge.add(userText);
+
+        JLabel chevron = new JLabel(" \u2304 ");
+        chevron.setForeground(MUTED);
+        userBadge.add(chevron);
+
+        header.add(rightControls, BorderLayout.EAST);
+        rightControls.add(userBadge);
+
+        return header;
+    }
+
+    private JPanel createBody() {
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setBackground(PAGE);
 
         JPanel titlePanel = new JPanel();
-        titlePanel.setOpaque(false);
         titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
+        titlePanel.setBackground(Color.WHITE);
+        titlePanel.setBorder(BorderFactory.createEmptyBorder(10, 28, 20, 28));
+        titlePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel heading = new JLabel("Financial Reports");
         heading.setFont(new Font("Serif", Font.BOLD, 28));
         heading.setForeground(DEEP_GREEN);
 
-        JLabel subtitle = new JLabel("Generate collection summaries, revenue reports, and audit logs");
+        JLabel subtitle = new JLabel("Generate collection summaries, revenue reports, and audit logs.");
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 12));
         subtitle.setForeground(MUTED);
 
@@ -176,48 +255,152 @@ public class CashierReportsFrame {
         titlePanel.add(Box.createVerticalStrut(8));
         titlePanel.add(goldLine);
 
-        header.add(titlePanel, BorderLayout.WEST);
-        return header;
+        JPanel contentWrapper = new JPanel(new BorderLayout(0, 24));
+        contentWrapper.setOpaque(false);
+        contentWrapper.setBorder(BorderFactory.createEmptyBorder(24, 28, 28, 28));
+
+        // Report Generation Cards
+        JPanel reportCardsContainer = new JPanel(new GridLayout(1, 3, 20, 0));
+        reportCardsContainer.setOpaque(false);
+        reportCardsContainer.add(createReportCard("Daily Collection", "End-of-day transaction summary", "Generate PDF", DEEP_GREEN, Color.WHITE));
+        reportCardsContainer.add(createReportCard("Monthly Revenue", "Comprehensive 30-day overview", "Export CSV", new Color(248, 237, 219), TEXT));
+        reportCardsContainer.add(createReportCard("Reconciliation Log", "Detailed shift balance audits", "Generate PDF", Color.WHITE, TEXT));
+
+        contentWrapper.add(reportCardsContainer, BorderLayout.NORTH);
+
+        // Recent Generated Reports Table
+        contentWrapper.add(createRecentReportsTable(), BorderLayout.CENTER);
+
+        body.add(titlePanel);
+        body.add(contentWrapper);
+
+        return body;
     }
 
-    private JPanel createBody() {
-        JPanel body = new JPanel(new GridLayout(1, 2, 16, 0));
-        body.setBackground(PAGE);
-        body.setBorder(BorderFactory.createEmptyBorder(12, 28, 24, 28));
+    private JPanel createReportCard(String title, String subtitle, String btnText, Color bgColor, Color fgColor) {
+        CardPanel card = new CardPanel(bgColor);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(BorderFactory.createEmptyBorder(24, 20, 24, 20));
 
-        CardPanel left = new CardPanel(Color.WHITE);
-        left.setLayout(new BorderLayout(0, 14));
-        left.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
-        JLabel lTitle = new JLabel("Daily Collection Report");
-        lTitle.setFont(new Font("Serif", Font.BOLD, 18));
-        lTitle.setForeground(DEEP_GREEN);
-        left.add(lTitle, BorderLayout.NORTH);
+        JLabel titleLbl = new JLabel(title);
+        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 16));
+        titleLbl.setForeground(fgColor);
+        titleLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JButton genDaily = new JButton("Generate & Download PDF");
-        genDaily.setBackground(DEEP_GREEN);
-        genDaily.setForeground(Color.WHITE);
-        genDaily.setFocusPainted(false);
-        genDaily.addActionListener(e -> JOptionPane.showMessageDialog(window, "Daily Collection Report generated successfully.", "REY SIS", JOptionPane.INFORMATION_MESSAGE));
-        left.add(genDaily, BorderLayout.CENTER);
+        JLabel subLbl = new JLabel(subtitle);
+        subLbl.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        subLbl.setForeground(bgColor == Color.WHITE || bgColor.equals(new Color(248, 237, 219)) ? MUTED : new Color(202, 219, 211));
+        subLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        CardPanel right = new CardPanel(Color.WHITE);
-        right.setLayout(new BorderLayout(0, 14));
-        right.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
-        JLabel rTitle = new JLabel("Monthly Revenue Statement");
-        rTitle.setFont(new Font("Serif", Font.BOLD, 18));
-        rTitle.setForeground(DEEP_GREEN);
-        right.add(rTitle, BorderLayout.NORTH);
+        JButton actionBtn = new JButton(btnText);
+        actionBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        actionBtn.setForeground(bgColor == DEEP_GREEN ? DEEP_GREEN : Color.WHITE);
+        actionBtn.setBackground(bgColor == DEEP_GREEN ? Color.WHITE : DEEP_GREEN);
+        actionBtn.setFocusPainted(false);
+        actionBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        actionBtn.setMaximumSize(new Dimension(160, 36));
+        actionBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        actionBtn.addActionListener(e -> JOptionPane.showMessageDialog(window, title + " report generated successfully.", "REY SIS", JOptionPane.INFORMATION_MESSAGE));
 
-        JButton genMonthly = new JButton("Generate & Download CSV");
-        genMonthly.setBackground(GOLD);
-        genMonthly.setForeground(TEXT);
-        genMonthly.setFocusPainted(false);
-        genMonthly.addActionListener(e -> JOptionPane.showMessageDialog(window, "Monthly Revenue Statement generated successfully.", "REY SIS", JOptionPane.INFORMATION_MESSAGE));
-        right.add(genMonthly, BorderLayout.CENTER);
+        card.add(titleLbl);
+        card.add(Box.createVerticalStrut(4));
+        card.add(subLbl);
+        card.add(Box.createVerticalStrut(20));
+        card.add(actionBtn);
 
-        body.add(left);
-        body.add(right);
-        return body;
+        return card;
+    }
+
+    private JPanel createRecentReportsTable() {
+        CardPanel card = new CardPanel(Color.WHITE);
+        card.setLayout(new BorderLayout(0, 14));
+        card.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+
+        JLabel title = new JLabel("Recently Generated Reports");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(DEEP_GREEN);
+        header.add(title, BorderLayout.WEST);
+
+        card.add(header, BorderLayout.NORTH);
+
+        JPanel tableContainer = new JPanel();
+        tableContainer.setOpaque(false);
+        tableContainer.setLayout(new BoxLayout(tableContainer, BoxLayout.Y_AXIS));
+
+        JPanel tableHeader = new JPanel(new GridBagLayout());
+        tableHeader.setOpaque(false);
+        tableHeader.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER),
+                BorderFactory.createEmptyBorder(8, 12, 10, 12)
+        ));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        addTableHeaderCell(tableHeader, "Report Name", 0, 0.35, gbc);
+        addTableHeaderCell(tableHeader, "Format", 1, 0.15, gbc);
+        addTableHeaderCell(tableHeader, "Date Generated", 2, 0.25, gbc);
+        addTableHeaderCell(tableHeader, "Action", 3, 0.25, gbc, SwingConstants.RIGHT);
+
+        tableContainer.add(tableHeader);
+
+        // Mock Data for the table
+        String[][] mockReports = {
+                {"Daily Collection - Oct 05", "PDF", "Today, 5:30 PM"},
+                {"Monthly Revenue - September", "CSV", "Oct 01, 2026, 9:00 AM"},
+                {"Reconciliation Audit - Week 3", "PDF", "Sep 28, 2026, 6:15 PM"}
+        };
+
+        for (String[] rowData : mockReports) {
+            JPanel row = new JPanel(new GridBagLayout());
+            row.setOpaque(false);
+            row.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(242, 243, 240)),
+                    BorderFactory.createEmptyBorder(14, 12, 14, 12)
+            ));
+
+            JLabel rName = new JLabel(rowData[0]);
+            rName.setFont(new Font("SansSerif", Font.BOLD, 12));
+            rName.setForeground(TEXT);
+            gbc.gridx = 0; gbc.weightx = 0.35; row.add(rName, gbc);
+
+            JLabel rFormat = new JLabel(rowData[1]);
+            rFormat.setFont(new Font("SansSerif", Font.PLAIN, 11));
+            rFormat.setForeground(MUTED);
+            gbc.gridx = 1; gbc.weightx = 0.15; row.add(rFormat, gbc);
+
+            JLabel rDate = new JLabel(rowData[2]);
+            rDate.setFont(new Font("SansSerif", Font.PLAIN, 11));
+            rDate.setForeground(TEXT);
+            gbc.gridx = 2; gbc.weightx = 0.25; row.add(rDate, gbc);
+
+            JLabel dlLink = new JLabel("Download", SwingConstants.RIGHT);
+            dlLink.setFont(new Font("SansSerif", Font.BOLD, 11));
+            dlLink.setForeground(new Color(34, 139, 34));
+            dlLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            gbc.gridx = 3; gbc.weightx = 0.25; row.add(dlLink, gbc);
+
+            tableContainer.add(row);
+        }
+
+        card.add(tableContainer, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void addTableHeaderCell(JPanel header, String text, int gridx, double weightx, GridBagConstraints gbc) {
+        addTableHeaderCell(header, text, gridx, weightx, gbc, SwingConstants.LEFT);
+    }
+
+    private void addTableHeaderCell(JPanel header, String text, int gridx, double weightx, GridBagConstraints gbc, int alignment) {
+        JLabel label = new JLabel(text, alignment);
+        label.setFont(new Font("SansSerif", Font.BOLD, 10));
+        label.setForeground(MUTED);
+        gbc.gridx = gridx;
+        gbc.weightx = weightx;
+        header.add(label, gbc);
     }
 
     private static BufferedImage loadImage(String resourcePath) {
@@ -266,6 +449,40 @@ public class CashierReportsFrame {
         }
     }
 
+    private static class VectorIcon implements javax.swing.Icon {
+        enum Type { SEARCH, USER_AVATAR }
+
+        private final Type type;
+        private final Color color;
+
+        VectorIcon(Type type, Color color) {
+            this.type = type;
+            this.color = color;
+        }
+
+        public int getIconWidth() { return 18; }
+        public int getIconHeight() { return 18; }
+
+        public void paintIcon(Component c, Graphics g0, int x, int y) {
+            Graphics2D g = (Graphics2D) g0.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(color);
+            g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+            switch (type) {
+                case SEARCH -> {
+                    g.drawOval(x + 2, y + 2, 10, 10);
+                    g.drawLine(x + 10, y + 10, x + 16, y + 16);
+                }
+                case USER_AVATAR -> {
+                    g.drawOval(x + 5, y + 2, 8, 8);
+                    g.drawArc(x + 2, y + 9, 14, 8, 0, 180);
+                }
+            }
+            g.dispose();
+        }
+    }
+
     public enum IconType {
         DASHBOARD, ENROLLMENT, PROFILE, RECORDS, RECONCILIATION, REPORTS, SIGN_OUT
     }
@@ -294,21 +511,21 @@ public class CashierReportsFrame {
                     g.drawRect(x + 2, y + 8, 5, 8);
                     g.drawRect(x + 10, y + 4, 5, 12);
                 }
-                case ENROLLMENT -> { // Collect Payment (Credit Card)
+                case ENROLLMENT -> {
                     g.drawRect(x + 2, y + 3, 15, 13);
                     g.drawLine(x + 5, y + 7, x + 14, y + 7);
                     g.drawLine(x + 5, y + 11, x + 11, y + 11);
                 }
-                case RECORDS -> { // Transaction (Receipt)
+                case RECORDS -> {
                     g.drawRect(x + 3, y + 2, 12, 15);
                     g.drawLine(x + 6, y + 6, x + 12, y + 6);
                     g.drawLine(x + 6, y + 10, x + 12, y + 10);
                 }
-                case PROFILE -> { // Student Accounts (User)
+                case PROFILE -> {
                     g.drawOval(x + 6, y + 3, 6, 6);
                     g.drawArc(x + 3, y + 11, 12, 6, 0, 180);
                 }
-                case RECONCILIATION -> { // Scales
+                case RECONCILIATION -> {
                     g.drawLine(x + 9, y + 2, x + 9, y + 14);
                     g.drawLine(x + 5, y + 14, x + 13, y + 14);
                     g.drawLine(x + 3, y + 5, x + 15, y + 5);
@@ -319,7 +536,7 @@ public class CashierReportsFrame {
                     g.drawLine(x + 15, y + 5, x + 17, y + 9);
                     g.drawLine(x + 13, y + 9, x + 17, y + 9);
                 }
-                case REPORTS -> { // Bar Chart
+                case REPORTS -> {
                     g.drawRect(x + 2, y + 8, 3, 6);
                     g.drawRect(x + 7, y + 4, 3, 10);
                     g.drawRect(x + 12, y + 2, 3, 12);
