@@ -74,7 +74,6 @@ public class StudentScheduleFrame {
         navigation.add(navigationButton("My Profile", StudentDashboardFrame.IconType.PROFILE, false));
         navigation.add(navigationButton("Enrollment", StudentDashboardFrame.IconType.ENROLLMENT, false));
         navigation.add(navigationButton("My Schedule", StudentDashboardFrame.IconType.CALENDAR, true));
-        navigation.add(navigationButton("Grades", StudentDashboardFrame.IconType.GRADES, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -116,8 +115,6 @@ public class StudentScheduleFrame {
             new StudentProfileFrame(student).showWindow();
         } else if (text.equals("Enrollment")) {
             new StudentEnrollmentFrame(student).showWindow();
-        } else if (text.equals("Grades")) {
-            new StudentGradesFrame(student).showWindow();
         } else if (text.equals("Sign Out")) {
             new LoginFrame().showWindow();
         }

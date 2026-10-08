@@ -7,6 +7,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,7 +27,7 @@ public final class CourseRepository {
     }
 
     public List<CourseSchedule> findSchedulesByCourseCode(String courseCode) throws SQLException {
-        String sql = "SELECT s.day_of_week, s.start_time, s.end_time, s.room, s.instructor "
+        String sql = "SELECT s.schedule_id, s.day_of_week, s.start_time, s.end_time, s.room, s.instructor "
                 + "FROM schedules s JOIN courses c ON c.course_id = s.course_id "
                 + "WHERE c.course_code = ? ORDER BY s.day_of_week, s.start_time";
         List<CourseSchedule> schedules = new ArrayList<>();
@@ -35,7 +36,7 @@ public final class CourseRepository {
             statement.setString(1, courseCode);
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
-                    schedules.add(new CourseSchedule(result.getString("day_of_week"),
+                    schedules.add(new CourseSchedule(result.getInt("schedule_id"), result.getString("day_of_week"),
                             result.getTime("start_time"), result.getTime("end_time"),
                             result.getString("room"), result.getString("instructor")));
                 }
@@ -66,6 +67,53 @@ public final class CourseRepository {
         }
     }
 
+    public void createSchedule(String courseCode, String dayOfWeek, LocalTime startTime, LocalTime endTime,
+                               String room, String instructor) throws SQLException {
+        String sql = "INSERT INTO schedules (course_id, day_of_week, start_time, end_time, room, instructor) "
+                + "SELECT course_id, ?, ?, ?, ?, ? FROM courses WHERE course_code = ?";
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, dayOfWeek);
+            statement.setTime(2, Time.valueOf(startTime));
+            statement.setTime(3, Time.valueOf(endTime));
+            statement.setString(4, room);
+            statement.setString(5, instructor);
+            statement.setString(6, courseCode);
+            if (statement.executeUpdate() != 1) {
+                throw new SQLException("Course was not found; schedule was not created.");
+            }
+        }
+    }
+
+    public void updateSchedule(int scheduleId, String dayOfWeek, LocalTime startTime, LocalTime endTime,
+                               String room, String instructor) throws SQLException {
+        String sql = "UPDATE schedules SET day_of_week = ?, start_time = ?, end_time = ?, room = ?, instructor = ? "
+                + "WHERE schedule_id = ?";
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, dayOfWeek);
+            statement.setTime(2, Time.valueOf(startTime));
+            statement.setTime(3, Time.valueOf(endTime));
+            statement.setString(4, room);
+            statement.setString(5, instructor);
+            statement.setInt(6, scheduleId);
+            if (statement.executeUpdate() != 1) {
+                throw new SQLException("Schedule no longer exists.");
+            }
+        }
+    }
+
+    public void deleteSchedule(int scheduleId) throws SQLException {
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "DELETE FROM schedules WHERE schedule_id = ?")) {
+            statement.setInt(1, scheduleId);
+            if (statement.executeUpdate() != 1) {
+                throw new SQLException("Schedule no longer exists.");
+            }
+        }
+    }
+
     private void executeUpdate(String sql, Course course, String department, String oldCode) throws SQLException {
         try (Connection connection = DatabaseConnection.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -80,6 +128,7 @@ public final class CourseRepository {
         }
     }
 
-    public record CourseSchedule(String dayOfWeek, Time startTime, Time endTime, String room, String instructor) {
+    public record CourseSchedule(int scheduleId, String dayOfWeek, Time startTime, Time endTime,
+                                 String room, String instructor) {
     }
 }

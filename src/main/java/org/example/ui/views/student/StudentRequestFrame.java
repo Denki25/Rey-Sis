@@ -71,8 +71,6 @@ public class StudentRequestFrame {
     }
 
     private void initMockData() {
-        docRequests.add(new DocRequestData("CERTIFICATE OF GRADES", "Shows your official marks/grades for specific semesters or your entire stay.", 1));
-        docRequests.add(new DocRequestData("CERTIFICATE OF GRADES", "Shows your official marks/grades for specific semesters or your entire stay.", 2));
         docRequests.add(new DocRequestData("CERTIFICATE OF ENROLLMENT", "Proves you are currently a registered student for the active semester.", 1));
         docRequests.add(new DocRequestData("CERTIFICATE OF REGISTRATION", "States the exact number of academic credits/units you have successfully completed.", 1));
     }
@@ -133,7 +131,6 @@ public class StudentRequestFrame {
         navigation.add(createNavigationButton("My Profile", StudentDashboardFrame.IconType.PROFILE, false));
         navigation.add(createNavigationButton("Enrollment", StudentDashboardFrame.IconType.ENROLLMENT, false));
         navigation.add(createNavigationButton("My Schedule", StudentDashboardFrame.IconType.CALENDAR, false));
-        navigation.add(createNavigationButton("Grades", StudentDashboardFrame.IconType.GRADES, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -167,7 +164,6 @@ public class StudentRequestFrame {
                 if (text.equals("Dashboard")) openDashboard();
                 else if (text.equals("My Profile")) openProfile();
                 else if (text.equals("Enrollment")) openEnrollment();
-                else if (text.equals("Grades")) openGrades();
                 else if (text.equals("My Schedule")) {
                     window.dispose();
                     new StudentScheduleFrame(student).showWindow();
@@ -427,7 +423,7 @@ public class StudentRequestFrame {
     }
 
     private void promptAddDocument() {
-        String[] options = {"Certificate of Grades", "Certificate of Enrollment", "Certificate of Registration", "Transcript of Records"};
+        String[] options = {"Certificate of Enrollment", "Certificate of Registration"};
         String selection = (String) JOptionPane.showInputDialog(window,
                 "Select document type to add:",
                 "Add Document",
@@ -562,11 +558,6 @@ public class StudentRequestFrame {
     private void openEnrollment() {
         window.dispose();
         new StudentEnrollmentFrame(student).showWindow();
-    }
-
-    private void openGrades() {
-        window.dispose();
-        new StudentGradesFrame(student).showWindow();
     }
 
     private void signOut() {

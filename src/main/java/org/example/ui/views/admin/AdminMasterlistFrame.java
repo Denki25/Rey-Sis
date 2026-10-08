@@ -159,7 +159,6 @@ public class AdminMasterlistFrame {
         navPanel.add(createNavButton("Student Masterlist", IconType.LIST, true));
         navPanel.add(createNavButton("Enrollment Validation", IconType.WINDOW, false));
         navPanel.add(createNavButton("Courses & Sections", IconType.LAYOUT, false));
-        navPanel.add(createNavButton("System Audit", IconType.USER_OUTLINE, false));
         sidebar.add(navPanel, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -219,8 +218,6 @@ public class AdminMasterlistFrame {
                 new AdminValidationFrame().showWindow();
             } else if (text.equals("Courses & Sections")) {
                 new AdminCourseFrame().setVisible(true);
-            } else if (text.equals("System Audit")) {
-                new AdminLogsFrame().setVisible(true);
             }
         });
 
@@ -384,9 +381,19 @@ public class AdminMasterlistFrame {
 
         toolbar.add(left, BorderLayout.WEST);
 
-        // Right Controls: Export CSV & Add Student
+        // Right Controls: Export CSV, refresh, and create a student account.
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
         right.setOpaque(false);
+
+        JButton addStudent = new JButton("+ Add Student");
+        addStudent.setFont(new Font("SansSerif", Font.BOLD, 12));
+        addStudent.setForeground(Color.WHITE);
+        addStudent.setBackground(SIDEBAR_BG);
+        addStudent.setBorder(new EmptyBorder(11, 18, 11, 18));
+        addStudent.setFocusPainted(false);
+        addStudent.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addStudent.addActionListener(event -> showAddStudentDialog());
+        right.add(addStudent);
 
         JButton exportBtn = new JButton("Export CSV", new VectorIcon(IconType.EXPORT, TEXT_DARK));
         exportBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
@@ -706,6 +713,46 @@ public class AdminMasterlistFrame {
                 + "<br><b>Program &amp; Year:</b> " + studentTableModel.getValueAt(modelRow, 2)
                 + "<br><b>Enrollment Status:</b> " + studentTableModel.getValueAt(modelRow, 3) + "</html>";
         JOptionPane.showMessageDialog(window, details, "Student Profile", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showAddStudentDialog() {
+        JTextField firstName = new JTextField();
+        JTextField lastName = new JTextField();
+        JTextField program = new JTextField("Bachelor of Science in Information Technology");
+        JTextField yearLevel = new JTextField("1st Year");
+        JTextField section = new JTextField("A");
+        JTextField email = new JTextField();
+        JPanel form = new JPanel(new GridLayout(6, 2, 8, 8));
+        form.add(new JLabel("First name:")); form.add(firstName);
+        form.add(new JLabel("Last name:")); form.add(lastName);
+        form.add(new JLabel("Program:")); form.add(program);
+        form.add(new JLabel("Year level:")); form.add(yearLevel);
+        form.add(new JLabel("Section:")); form.add(section);
+        form.add(new JLabel("Email (optional):")); form.add(email);
+
+        int result = JOptionPane.showConfirmDialog(window, form, "Add Student",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+        if (firstName.getText().isBlank() || lastName.getText().isBlank()
+                || program.getText().isBlank() || yearLevel.getText().isBlank()) {
+            JOptionPane.showMessageDialog(window, "First name, last name, program, and year level are required.",
+                    "Student Details Required", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            StudentDirectoryRepository.CreatedStudent created = studentService.createStudent(
+                    firstName.getText().trim(), lastName.getText().trim(), program.getText().trim(),
+                    yearLevel.getText().trim(), section.getText().trim(), email.getText().trim());
+            refreshStudents();
+            JOptionPane.showMessageDialog(window,
+                    "Student created successfully.\nStudent ID / login: " + created.studentId()
+                            + "\nInitial password: 123",
+                    "Student Created", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException | SecurityException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to create the student: " + exception.getMessage(),
+                    "Student Creation Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void exportVisibleRows() {

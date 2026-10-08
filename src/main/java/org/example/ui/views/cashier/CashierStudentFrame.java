@@ -356,11 +356,11 @@ public class CashierStudentFrame {
         center.add(info);
         center.add(Box.createVerticalStrut(10));
 
-        JLabel feesTitle = new JLabel("Tuition Summary");
+        JLabel feesTitle = new JLabel("Tuition & Fee Summary");
         feesTitle.setFont(new Font("SansSerif", Font.BOLD, 13));
         center.add(feesTitle);
         DefaultTableModel fees = new DefaultTableModel(new Object[]{"DESCRIPTION", "ASSESSED", "PAID", "BALANCE"}, 0);
-        fees.addRow(new Object[]{"Enrolled-course tuition", formatAmount(student.assessed),
+        fees.addRow(new Object[]{"Tuition and miscellaneous fees", formatAmount(student.assessed),
                 formatAmount(student.paid), formatAmount(student.balance)});
         JTable feesTable = new JTable(fees);
         feesTable.setEnabled(false);

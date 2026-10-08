@@ -69,20 +69,6 @@ CREATE TABLE IF NOT EXISTS enrollments (
     CONSTRAINT fk_enrollments_course FOREIGN KEY (course_id) REFERENCES courses(course_id)
 );
 
-CREATE TABLE IF NOT EXISTS grades (
-    grade_id INT NOT NULL AUTO_INCREMENT,
-    student_id VARCHAR(50) NOT NULL,
-    course_id INT NOT NULL,
-    semester VARCHAR(20) NOT NULL,
-    academic_year VARCHAR(20) NOT NULL,
-    grade DECIMAL(4,2) NULL,
-    remarks TEXT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (grade_id),
-    CONSTRAINT fk_grades_student FOREIGN KEY (student_id) REFERENCES students(student_id),
-    CONSTRAINT fk_grades_course FOREIGN KEY (course_id) REFERENCES courses(course_id)
-);
-
 CREATE TABLE IF NOT EXISTS announcements (
     announcement_id INT NOT NULL AUTO_INCREMENT,
     content TEXT NOT NULL,
@@ -112,6 +98,27 @@ CREATE TABLE IF NOT EXISTS payments (
     status VARCHAR(30) NOT NULL DEFAULT 'VERIFIED',
     PRIMARY KEY (payment_id),
     CONSTRAINT fk_payments_student FOREIGN KEY (student_id) REFERENCES students(student_id)
+);
+
+CREATE TABLE IF NOT EXISTS billing_settings (
+    settings_id INT NOT NULL,
+    tuition_rate_per_unit DECIMAL(10,2) NOT NULL,
+    library_fee DECIMAL(10,2) NOT NULL,
+    registration_fee DECIMAL(10,2) NOT NULL,
+    it_lab_fee DECIMAL(10,2) NOT NULL,
+    athletics_fee DECIMAL(10,2) NOT NULL,
+    PRIMARY KEY (settings_id)
+);
+
+INSERT INTO billing_settings
+    (settings_id, tuition_rate_per_unit, library_fee, registration_fee, it_lab_fee, athletics_fee)
+VALUES (1, 1800.00, 1500.00, 1000.00, 2500.00, 800.00)
+ON DUPLICATE KEY UPDATE settings_id = VALUES(settings_id);
+
+CREATE TABLE IF NOT EXISTS student_id_sequences (
+    sequence_year INT NOT NULL,
+    next_number INT NOT NULL,
+    PRIMARY KEY (sequence_year)
 );
 
 INSERT INTO users (username, password_hash, role, is_active)

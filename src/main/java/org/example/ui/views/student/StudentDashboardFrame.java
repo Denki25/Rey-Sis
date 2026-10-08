@@ -123,7 +123,6 @@ public class StudentDashboardFrame {
         navigation.add(createNavigationButton("My Profile", IconType.PROFILE, false));
         navigation.add(createNavigationButton("Enrollment", IconType.ENROLLMENT, false));
         navigation.add(createNavigationButton("My Schedule", IconType.CALENDAR, false));
-        navigation.add(createNavigationButton("Grades", IconType.GRADES, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -169,9 +168,6 @@ public class StudentDashboardFrame {
                 openProfile();
             } else if (text.equals("Enrollment")) {
                 openEnrollment(); // Replace showComingSoon("Enrollment")
-            } else if (text.equals("Grades")) {
-                window.dispose();
-                new StudentGradesFrame(student).showWindow();
             } else if (text.equals("My Schedule")) {
                 openSchedule();
             } else if (active) {
@@ -228,9 +224,9 @@ public class StudentDashboardFrame {
         JPanel cards = new JPanel(new GridLayout(1, 4, 10, 0));
         cards.setOpaque(false);
         cards.add(createStatCard("Enrolled Subjects", String.valueOf(student.getEnrolledSubjects()), "", IconType.ENROLLMENT, DEEP_GREEN));
-        cards.add(createStatCard("Current GPA", String.format("%.2f", student.getCurrentGpa()), "", IconType.GPA, GOLD));
-        cards.add(createStatCard("Units Enrolled", student.getEnrolledUnits() + " / " + student.getMaximumUnits(), "", IconType.GRADES, DEEP_GREEN));
-        cards.add(createStatCard("Dean's List Standing", student.getDeansListStanding(), "", IconType.STAR, GOLD));
+        cards.add(createStatCard("Year Level", student.getYearLevel(), "", IconType.PROFILE, GOLD));
+        cards.add(createStatCard("Units Enrolled", student.getEnrolledUnits() + " / " + student.getMaximumUnits(), "", IconType.STATS, DEEP_GREEN));
+        cards.add(createStatCard("Academic Status", student.getAcademicStatus(), "", IconType.STAR, GOLD));
         section.add(cards, BorderLayout.CENTER);
         return section;
     }
@@ -244,7 +240,7 @@ public class StudentDashboardFrame {
         card.add(icon);
         card.add(Box.createVerticalStrut(7));
         JLabel valueLabel = new JLabel(value + suffix);
-        valueLabel.setFont(new Font("SansSerif", Font.BOLD, title.equals("Dean's List Standing") ? 19 : 25));
+        valueLabel.setFont(new Font("SansSerif", Font.BOLD, 19));
         valueLabel.setForeground(TEXT);
         valueLabel.setAlignmentX(0.5f);
         valueLabel.setHorizontalAlignment(SwingConstants.CENTER);
@@ -709,8 +705,8 @@ public class StudentDashboardFrame {
     }
 
     enum IconType {
-        DASHBOARD, PROFILE, ENROLLMENT, CALENDAR, GRADES, RECORDS, REQUESTS, BELL,
-        SIGN_OUT, STATS, GPA, STAR, ANNOUNCEMENT, TASK
+        DASHBOARD, PROFILE, ENROLLMENT, CALENDAR, RECORDS, REQUESTS, BELL,
+        SIGN_OUT, STATS, STAR, ANNOUNCEMENT, TASK
     }
 
     static class DashboardIcon implements javax.swing.Icon {
@@ -738,12 +734,11 @@ public class StudentDashboardFrame {
                 case PROFILE -> { g.drawOval(x + 6, y + 2, 7, 7); g.drawArc(x + 3, y + 10, 13, 9, 0, 180); }
                 case ENROLLMENT -> { g.drawRect(x + 3, y + 4, 13, 13); g.drawLine(x + 3, y + 8, x + 16, y + 8); g.drawLine(x + 6, y + 2, x + 6, y + 6); g.drawLine(x + 13, y + 2, x + 13, y + 6); }
                 case CALENDAR -> { g.drawRect(x + 2, y + 4, 15, 13); g.drawLine(x + 2, y + 8, x + 17, y + 8); g.drawLine(x + 6, y + 2, x + 6, y + 6); g.drawLine(x + 13, y + 2, x + 13, y + 6); }
-                case GRADES, STATS -> { g.fillRect(x + 2, y + 11, 4, 6); g.fillRect(x + 8, y + 7, 4, 10); g.fillRect(x + 14, y + 3, 4, 14); }
+                case STATS -> { g.fillRect(x + 2, y + 11, 4, 6); g.fillRect(x + 8, y + 7, 4, 10); g.fillRect(x + 14, y + 3, 4, 14); }
                 case RECORDS -> { g.drawRoundRect(x + 3, y + 2, 13, 16, 2, 2); g.drawLine(x + 6, y + 7, x + 13, y + 7); g.drawLine(x + 6, y + 11, x + 13, y + 11); g.drawLine(x + 6, y + 15, x + 10, y + 15); }
                 case REQUESTS -> { g.drawRect(x + 3, y + 3, 12, 14); g.drawLine(x + 6, y + 7, x + 12, y + 7); g.drawLine(x + 6, y + 11, x + 12, y + 11); }
                 case BELL -> { g.drawArc(x + 4, y + 2, 11, 13, 0, 180); g.drawLine(x + 4, y + 9, x + 4, y + 15); g.drawLine(x + 15, y + 9, x + 15, y + 15); g.drawLine(x + 2, y + 15, x + 17, y + 15); g.drawOval(x + 8, y + 16, 3, 3); }
                 case SIGN_OUT -> { g.drawLine(x + 3, y + 3, x + 3, y + 16); g.drawLine(x + 3, y + 3, x + 10, y + 3); g.drawLine(x + 3, y + 16, x + 10, y + 16); g.drawLine(x + 8, y + 9, x + 17, y + 9); g.drawLine(x + 13, y + 5, x + 17, y + 9); g.drawLine(x + 13, y + 13, x + 17, y + 9); }
-                case GPA -> { g.drawRect(x + 3, y + 3, 13, 15); g.drawLine(x + 6, y + 7, x + 13, y + 7); g.drawLine(x + 6, y + 11, x + 10, y + 11); g.drawOval(x + 11, y + 12, 4, 4); }
                 case STAR -> { int[] xs = {x + 10, x + 12, x + 17, x + 13, x + 14, x + 10, x + 6, x + 7, x + 3, x + 8}; int[] ys = {y + 2, y + 7, y + 7, y + 10, y + 16, y + 13, y + 16, y + 10, y + 7, y + 7}; g.fillPolygon(xs, ys, 10); }
                 case ANNOUNCEMENT -> { g.drawRect(x + 4, y + 5, 12, 10); g.drawLine(x + 4, y + 7, x + 1, y + 5); g.drawLine(x + 1, y + 5, x + 1, y + 14); g.drawLine(x + 1, y + 14, x + 4, y + 13); }
                 case TASK -> { g.drawRoundRect(x + 4, y + 3, 12, 14, 2, 2); g.drawLine(x + 7, y + 2, x + 13, y + 2); g.drawLine(x + 7, y + 8, x + 13, y + 8); g.drawLine(x + 7, y + 12, x + 13, y + 12); }

@@ -3,7 +3,6 @@ package org.example.data;
 import org.example.model.Announcement;
 import org.example.model.Course;
 import org.example.model.EnrollmentRecord;
-import org.example.model.GradeRecord;
 import org.example.model.ScheduleItem;
 import org.example.model.Student;
 import org.example.model.Task;
@@ -43,18 +42,16 @@ public final class StudentRepository {
                 }
                 String studentId = result.getString("student_id");
                 List<EnrollmentRecord> enrollments = findEnrollments(connection, studentId);
-                List<GradeRecord> grades = findGrades(connection, studentId);
-                AcademicSummary summary = summarize(enrollments, grades);
+                AcademicSummary summary = summarize(enrollments);
                 Date dateOfBirth = result.getDate("date_of_birth");
                 String fullName = (result.getString("first_name") + " " + result.getString("last_name")).trim();
                 return new Student(studentId, fullName, result.getString("program"), result.getString("year_level"),
                         result.getString("email"), result.getString("contact_number"), summary.subjectCount,
-                        summary.gpa, summary.units, DEFAULT_MAXIMUM_UNITS, summary.standing,
-                        findSchedule(connection, studentId), findAnnouncements(connection),
+                        summary.units, DEFAULT_MAXIMUM_UNITS, findSchedule(connection, studentId), findAnnouncements(connection),
                         taskRepository.findByStudentId(studentId), formatDate(dateOfBirth), result.getString("address"),
                         result.getString("section"), result.getString("academic_status"),
                         result.getString("curriculum_year"), result.getString("adviser"),
-                        result.getString("avatar_path"), summary.enrollmentSemester, enrollments, grades);
+                        result.getString("avatar_path"), summary.enrollmentSemester, enrollments);
             }
         }
     }
@@ -78,40 +75,16 @@ public final class StudentRepository {
         return enrollments;
     }
 
-    private List<GradeRecord> findGrades(Connection connection, String studentId) throws SQLException {
-        String sql = "SELECT c.course_code, c.course_name, c.units, g.grade, g.remarks, g.semester, "
-                + "g.academic_year FROM grades g JOIN courses c ON c.course_id = g.course_id "
-                + "WHERE g.student_id = ? ORDER BY g.academic_year DESC, g.semester, c.course_code";
-        List<GradeRecord> grades = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, studentId);
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    grades.add(new GradeRecord(
-                            new Course(result.getString("course_code"), result.getString("course_name"),
-                                    result.getBigDecimal("units").intValue()),
-                            result.getBigDecimal("grade").doubleValue(), result.getString("remarks"),
-                            result.getString("semester"), result.getString("academic_year")));
-                }
-            }
-        }
-        return grades;
-    }
-
-    private AcademicSummary summarize(List<EnrollmentRecord> enrollments, List<GradeRecord> grades) {
+    private AcademicSummary summarize(List<EnrollmentRecord> enrollments) {
         int enrolledSubjects = (int) enrollments.stream()
                 .filter(enrollment -> enrollment.status() == null || "ENROLLED".equalsIgnoreCase(enrollment.status()))
                 .count();
         int enrolledUnits = enrollments.stream()
                 .filter(enrollment -> enrollment.status() == null || "ENROLLED".equalsIgnoreCase(enrollment.status()))
                 .mapToInt(enrollment -> enrollment.course().getUnits()).sum();
-        double weightedTotal = grades.stream().mapToDouble(grade -> grade.grade() * grade.course().getUnits()).sum();
-        int gradedUnits = grades.stream().mapToInt(grade -> grade.course().getUnits()).sum();
-        double gpa = gradedUnits == 0 ? 0.0 : weightedTotal / gradedUnits;
-        String standing = grades.isEmpty() ? "N/A" : gpa <= 1.75 ? "Eligible" : "Not Eligible";
         String semester = enrollments.isEmpty() ? null
                 : enrollments.get(0).semester() + ", AY " + enrollments.get(0).academicYear();
-        return new AcademicSummary(enrolledSubjects, gpa, enrolledUnits, standing, semester);
+        return new AcademicSummary(enrolledSubjects, enrolledUnits, semester);
     }
 
     private List<ScheduleItem> findSchedule(Connection connection, String studentId) throws SQLException {
@@ -157,6 +130,6 @@ public final class StudentRepository {
         return time == null ? "" : time.toLocalTime().format(DateTimeFormatter.ofPattern("h:mm a"));
     }
 
-    private record AcademicSummary(int subjectCount, double gpa, int units, String standing, String enrollmentSemester) {
+    private record AcademicSummary(int subjectCount, int units, String enrollmentSemester) {
     }
 }

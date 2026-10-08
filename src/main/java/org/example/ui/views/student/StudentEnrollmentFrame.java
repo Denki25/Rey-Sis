@@ -4,6 +4,8 @@ import org.example.model.Student;
 import org.example.model.EnrollmentRecord;
 import org.example.model.Course;
 import org.example.service.EnrollmentService;
+import org.example.data.BillingSettingsRepository;
+import org.example.data.BillingSettingsRepository.BillingSettings;
 import org.example.ui.LoginFrame;
 
 import javax.imageio.ImageIO;
@@ -65,6 +67,7 @@ public class StudentEnrollmentFrame {
     private final JFrame window = new JFrame("REY SIS | Enrollment");
     private final Student student;
     private final EnrollmentService enrollmentService = new EnrollmentService();
+    private BillingSettings billingSettings;
     private final DefaultTableModel selectedSubjectsModel = new DefaultTableModel(
             new Object[]{"CODE", "COURSE TITLE", "UNITS", "ACTION"}, 0) {
         public boolean isCellEditable(int row, int column) {
@@ -84,6 +87,13 @@ public class StudentEnrollmentFrame {
 
     public StudentEnrollmentFrame(Student student) {
         this.student = student;
+        try {
+            billingSettings = new BillingSettingsRepository().findSettings();
+        } catch (java.sql.SQLException exception) {
+            JOptionPane.showMessageDialog(window, "Unable to load tuition and fee settings: "
+                            + exception.getMessage(),
+                    "Billing Settings Error", JOptionPane.ERROR_MESSAGE);
+        }
         initDefaultSubjects();
 
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -91,6 +101,9 @@ public class StudentEnrollmentFrame {
         window.setSize(1360, 820);
         window.setLocationRelativeTo(null);
         window.setContentPane(createContent());
+        if (billingSettings == null) {
+            continueButton.setEnabled(false);
+        }
     }
 
     public void showWindow() {
@@ -168,7 +181,6 @@ public class StudentEnrollmentFrame {
         navigation.add(createNavigationButton("My Profile", StudentDashboardFrame.IconType.PROFILE, false));
         navigation.add(createNavigationButton("Enrollment", StudentDashboardFrame.IconType.ENROLLMENT, true));
         navigation.add(createNavigationButton("My Schedule", StudentDashboardFrame.IconType.CALENDAR, false));
-        navigation.add(createNavigationButton("Grades", StudentDashboardFrame.IconType.GRADES, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -205,9 +217,6 @@ public class StudentEnrollmentFrame {
                     openProfile();
                 } else if (text.equals("Enrollment")) {
                     showEnrollmentMessage();
-                } else if (text.equals("Grades")) {
-                    window.dispose();
-                    new StudentGradesFrame(student).showWindow();
                 } else if (text.equals("My Schedule")) {
                     window.dispose();
                     new StudentScheduleFrame(student).showWindow();
@@ -704,14 +713,15 @@ public class StudentEnrollmentFrame {
     }
 
     private double calculateTuition() {
-        return calculateTotalUnits() * 1800.0;
+        return billingSettings == null ? 0.0 : billingSettings.tuitionForUnits(calculateTotalUnits());
     }
 
     private void updateSummary() {
         if (totalSubjectsLabel != null) {
             totalSubjectsLabel.setText(String.valueOf(selectedSubjectsModel.getRowCount()));
             totalUnitsLabel.setText(String.valueOf(calculateTotalUnits()));
-            estimatedTuitionLabel.setText(String.format("₱ %,.2f", calculateTuition()));
+            estimatedTuitionLabel.setText(billingSettings == null ? "Unavailable"
+                    : String.format("₱ %,.2f", calculateTuition()));
         }
     }
 
@@ -720,6 +730,11 @@ public class StudentEnrollmentFrame {
     }
 
     private void openAssessment() {
+        if (billingSettings == null) {
+            JOptionPane.showMessageDialog(window, "Tuition and fee settings are unavailable. Contact an administrator.",
+                    "Billing Settings Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         if (selectedSubjectsModel.getRowCount() == 0) {
             JOptionPane.showMessageDialog(window,
                     "Please select at least one subject before proceeding to Assessment.",
@@ -734,7 +749,7 @@ public class StudentEnrollmentFrame {
                     ((Number) selectedSubjectsModel.getValueAt(row, 2)).intValue()));
         }
         AssessmentDialog dialog = new AssessmentDialog(window, student, subjects,
-                calculateTotalUnits(), calculateTuition(), this::markEnrollmentSubmitted);
+                calculateTotalUnits(), calculateTuition(), billingSettings, this::markEnrollmentSubmitted);
         dialog.setVisible(true);
     }
 

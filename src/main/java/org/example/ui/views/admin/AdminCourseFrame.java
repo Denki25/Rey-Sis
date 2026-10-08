@@ -11,6 +11,8 @@ import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -91,7 +93,6 @@ public class AdminCourseFrame extends JFrame {
         navPanel.add(createNavButton("Student Masterlist", IconType.LIST, false));
         navPanel.add(createNavButton("Enrollment Validation", IconType.WINDOW, false));
         navPanel.add(createNavButton("Courses & Sections", IconType.LAYOUT, true));
-        navPanel.add(createNavButton("System Audit", IconType.USER_OUTLINE, false));
         sidebar.add(navPanel, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -151,8 +152,6 @@ public class AdminCourseFrame extends JFrame {
                 new AdminValidationFrame().showWindow();
             } else if (text.equals("Courses & Sections")) {
                 new AdminCourseFrame().setVisible(true);
-            } else if (text.equals("System Audit")) {
-                new AdminLogsFrame().setVisible(true);
             }
         });
 
@@ -325,7 +324,13 @@ public class AdminCourseFrame extends JFrame {
         activeSectionsTitle = new JLabel();
         activeSectionsTitle.setFont(new Font("Segoe UI", Font.BOLD, 14));
         activeSectionsTitle.setForeground(TEXT_DARK);
-        sectionContainer.add(activeSectionsTitle, BorderLayout.NORTH);
+        JPanel scheduleHeader = new JPanel(new BorderLayout());
+        scheduleHeader.setBackground(Color.WHITE);
+        scheduleHeader.add(activeSectionsTitle, BorderLayout.WEST);
+        JButton addSchedule = createPrimaryButton("+ Add Schedule", Color.WHITE, BRAND_GREEN, BRAND_GREEN);
+        addSchedule.addActionListener(event -> showScheduleDialog(null));
+        scheduleHeader.add(addSchedule, BorderLayout.EAST);
+        sectionContainer.add(scheduleHeader, BorderLayout.NORTH);
         JScrollPane scroll = new JScrollPane(sectionsPanel);
         scroll.setBorder(null);
         scroll.getVerticalScrollBar().setUnitIncrement(14);
@@ -364,7 +369,7 @@ public class AdminCourseFrame extends JFrame {
 
     private JPanel createDynamicScheduleCard(CourseRepository.CourseSchedule schedule) {
         RoundedPanel card = new RoundedPanel(15, BG_LIGHT, BORDER_COLOR);
-        card.setLayout(new GridLayout(3, 1, 0, 5));
+        card.setLayout(new BorderLayout(12, 0));
         card.setBorder(new EmptyBorder(15, 20, 15, 20));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
         JLabel day = new JLabel(schedule.dayOfWeek());
@@ -376,10 +381,92 @@ public class AdminCourseFrame extends JFrame {
         JLabel details = new JLabel("Room: " + schedule.room() + " | Instructor: " + schedule.instructor());
         details.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         details.setForeground(TEXT_MUTED);
-        card.add(day);
-        card.add(time);
-        card.add(details);
+        JPanel labels = new JPanel(new GridLayout(3, 1, 0, 5));
+        labels.setOpaque(false);
+        labels.add(day);
+        labels.add(time);
+        labels.add(details);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 12));
+        actions.setOpaque(false);
+        JButton edit = new JButton("Edit");
+        edit.addActionListener(event -> showScheduleDialog(schedule));
+        JButton delete = new JButton("Delete");
+        delete.addActionListener(event -> deleteSchedule(schedule));
+        actions.add(edit);
+        actions.add(delete);
+        card.add(labels, BorderLayout.CENTER);
+        card.add(actions, BorderLayout.EAST);
         return card;
+    }
+
+    private void showScheduleDialog(CourseRepository.CourseSchedule schedule) {
+        if (selectedCourse == null) {
+            JOptionPane.showMessageDialog(this, "Select a course before adding a schedule.",
+                    "No Course Selected", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String[] weekdays = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+        JComboBox<String> day = new JComboBox<>(weekdays);
+        JTextField start = new JTextField(schedule == null ? "08:00"
+                : schedule.startTime().toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")));
+        JTextField end = new JTextField(schedule == null ? "09:00"
+                : schedule.endTime().toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")));
+        JTextField room = new JTextField(schedule == null ? "" : schedule.room());
+        JTextField instructor = new JTextField(schedule == null ? "" : schedule.instructor());
+        if (schedule != null) {
+            day.setSelectedItem(schedule.dayOfWeek());
+        }
+        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
+        form.add(new JLabel("Day:")); form.add(day);
+        form.add(new JLabel("Start time (HH:mm):")); form.add(start);
+        form.add(new JLabel("End time (HH:mm):")); form.add(end);
+        form.add(new JLabel("Room:")); form.add(room);
+        form.add(new JLabel("Instructor:")); form.add(instructor);
+        int result = JOptionPane.showConfirmDialog(this, form,
+                schedule == null ? "Add Schedule" : "Edit Schedule",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+        try {
+            LocalTime startTime = LocalTime.parse(start.getText().trim());
+            LocalTime endTime = LocalTime.parse(end.getText().trim());
+            if (!endTime.isAfter(startTime)) {
+                throw new IllegalArgumentException("End time must be after start time.");
+            }
+            if (schedule == null) {
+                courseRepository.createSchedule(selectedCourse.code, String.valueOf(day.getSelectedItem()),
+                        startTime, endTime, room.getText().trim(), instructor.getText().trim());
+            } else {
+                courseRepository.updateSchedule(schedule.scheduleId(), String.valueOf(day.getSelectedItem()),
+                        startTime, endTime, room.getText().trim(), instructor.getText().trim());
+            }
+            refreshSelectedCourse();
+        } catch (IllegalArgumentException exception) {
+            JOptionPane.showMessageDialog(this, "Enter valid times in HH:mm format; the end must be after the start.",
+                    "Invalid Schedule", JOptionPane.WARNING_MESSAGE);
+        } catch (java.sql.SQLException exception) {
+            JOptionPane.showMessageDialog(this, "Unable to save the schedule: " + exception.getMessage(),
+                    "Schedule Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void deleteSchedule(CourseRepository.CourseSchedule schedule) {
+        int result = JOptionPane.showConfirmDialog(this, "Delete this schedule?",
+                "Delete Schedule", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (result != JOptionPane.YES_OPTION) return;
+        try {
+            courseRepository.deleteSchedule(schedule.scheduleId());
+            refreshSelectedCourse();
+        } catch (java.sql.SQLException exception) {
+            JOptionPane.showMessageDialog(this, "Unable to delete the schedule: " + exception.getMessage(),
+                    "Schedule Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void refreshSelectedCourse() {
+        String selectedCode = selectedCourse == null ? null : selectedCourse.code;
+        initializeCourses(selectedCode);
+        refreshCatalog();
+        refreshSectionDetails();
     }
 
     private JButton findButton(Container container, String text) {

@@ -12,15 +12,22 @@ import java.util.List;
 public final class PaymentRepository {
     public List<PaymentStudent> findStudentsWithBalances() throws SQLException {
         String sql = "SELECT s.student_id, CONCAT(s.first_name, ' ', s.last_name) AS student_name, s.program, "
-                + "COALESCE(SUM(c.units) * 1800, 0) AS tuition_assessed, "
+                + "(COALESCE(e.enrolled_units, 0) * b.tuition_rate_per_unit + "
+                + "CASE WHEN COALESCE(e.enrolled_units, 0) > 0 THEN "
+                + "b.library_fee + b.registration_fee + b.it_lab_fee + b.athletics_fee ELSE 0 END) AS tuition_assessed, "
                 + "COALESCE(p.verified_payments, 0) AS verified_payments, "
-                + "GREATEST(COALESCE(SUM(c.units) * 1800, 0) - COALESCE(p.verified_payments, 0), 0) AS tuition_balance "
-                + "FROM students s LEFT JOIN enrollments e ON e.student_id = s.student_id "
-                + "LEFT JOIN courses c ON c.course_id = e.course_id "
+                + "GREATEST(COALESCE(e.enrolled_units, 0) * b.tuition_rate_per_unit + "
+                + "CASE WHEN COALESCE(e.enrolled_units, 0) > 0 THEN "
+                + "b.library_fee + b.registration_fee + b.it_lab_fee + b.athletics_fee ELSE 0 END "
+                + "- COALESCE(p.verified_payments, 0), 0) AS tuition_balance "
+                + "FROM students s CROSS JOIN billing_settings b "
+                + "LEFT JOIN (SELECT e.student_id, SUM(c.units) AS enrolled_units FROM enrollments e "
+                + "JOIN courses c ON c.course_id = e.course_id "
+                + "WHERE e.status = 'ENROLLED' OR e.status IS NULL GROUP BY e.student_id) e "
+                + "ON e.student_id = s.student_id "
                 + "LEFT JOIN (SELECT student_id, SUM(amount) AS verified_payments FROM payments "
                 + "WHERE status = 'VERIFIED' GROUP BY student_id) p ON p.student_id = s.student_id "
-                + "GROUP BY s.student_id, s.first_name, s.last_name, s.program, p.verified_payments "
-                + "ORDER BY s.last_name, s.first_name";
+                + "WHERE b.settings_id = 1 ORDER BY s.last_name, s.first_name";
         List<PaymentStudent> students = new ArrayList<>();
         try (Connection connection = DatabaseConnection.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql);

@@ -103,8 +103,6 @@ public class AdminDashboardFrame {
         navPanel.add(createNavButton("Student Masterlist", IconType.LIST, false));
         navPanel.add(createNavButton("Enrollment Validation", IconType.WINDOW, false));
         navPanel.add(createNavButton("Courses & Sections", IconType.LAYOUT, false));
-        navPanel.add(createNavButton("Honors List", IconType.GRID, false));
-        navPanel.add(createNavButton("System Audit", IconType.USER_OUTLINE, false));
         sidebar.add(navPanel, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -164,10 +162,6 @@ public class AdminDashboardFrame {
                 new AdminValidationFrame().showWindow();
             } else if (text.equals("Courses & Sections")) {
                 new AdminCourseFrame().setVisible(true);
-            } else if (text.equals("Honors List")) {
-                new AdminHonorsFrame().showWindow();
-            } else if (text.equals("System Audit")) {
-                new AdminLogsFrame().setVisible(true);
             }
         });
 

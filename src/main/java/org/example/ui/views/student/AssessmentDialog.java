@@ -1,6 +1,7 @@
 package org.example.ui.views.student;
 
 import org.example.model.Student;
+import org.example.data.BillingSettingsRepository.BillingSettings;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
@@ -31,20 +32,18 @@ public class AssessmentDialog extends JDialog {
     private static final Color TEXT = new Color(18, 43, 39);
     private static final Color MUTED = new Color(106, 112, 111);
     private static final Color BORDER = new Color(234, 235, 231);
-    private static final double LIBRARY_FEE = 1500.0;
-    private static final double REGISTRATION_FEE = 1000.0;
-    private static final double IT_LAB_FEE = 2500.0;
-    private static final double ATHLETICS_FEE = 800.0;
-
     private final Runnable onSubmitted;
     private final double totalAmount;
+    private final BillingSettings billingSettings;
     private final JPanel installmentPreview = new JPanel(new GridLayout(3, 1, 0, 4));
 
     public AssessmentDialog(java.awt.Frame owner, Student student, List<SubjectLine> subjects,
-                            int totalUnits, double baseTuition, Runnable onSubmitted) {
+                            int totalUnits, double baseTuition, BillingSettings billingSettings,
+                            Runnable onSubmitted) {
         super(owner, "REY SIS | Assessment", true);
         this.onSubmitted = onSubmitted;
-        this.totalAmount = baseTuition + LIBRARY_FEE + REGISTRATION_FEE + IT_LAB_FEE + ATHLETICS_FEE;
+        this.billingSettings = billingSettings;
+        this.totalAmount = baseTuition + billingSettings.totalMiscellaneousFees();
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setSize(780, 680);
         setMinimumSize(new Dimension(700, 600));
@@ -98,11 +97,12 @@ public class AssessmentDialog extends JDialog {
         DefaultTableModel model = new DefaultTableModel(new Object[]{"DESCRIPTION", "DETAIL", "AMOUNT"}, 0) {
             public boolean isCellEditable(int row, int column) { return false; }
         };
-        model.addRow(new Object[]{"Tuition Fee", totalUnits + " units x ₱1,800/unit", money(baseTuition)});
-        model.addRow(new Object[]{"Library Fee", "Miscellaneous", money(LIBRARY_FEE)});
-        model.addRow(new Object[]{"Registration Fee", "Miscellaneous", money(REGISTRATION_FEE)});
-        model.addRow(new Object[]{"IT & Lab Fee", "Miscellaneous", money(IT_LAB_FEE)});
-        model.addRow(new Object[]{"Athletics", "Miscellaneous", money(ATHLETICS_FEE)});
+        model.addRow(new Object[]{"Tuition Fee",
+                totalUnits + " units x " + money(billingSettings.tuitionRatePerUnit()) + "/unit", money(baseTuition)});
+        model.addRow(new Object[]{"Library Fee", "Miscellaneous", money(billingSettings.libraryFee())});
+        model.addRow(new Object[]{"Registration Fee", "Miscellaneous", money(billingSettings.registrationFee())});
+        model.addRow(new Object[]{"IT & Lab Fee", "Miscellaneous", money(billingSettings.itLabFee())});
+        model.addRow(new Object[]{"Athletics", "Miscellaneous", money(billingSettings.athleticsFee())});
         JTable table = new JTable(model);
         table.setRowHeight(30);
         table.setShowGrid(false);

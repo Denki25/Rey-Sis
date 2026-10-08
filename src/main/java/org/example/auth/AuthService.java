@@ -39,7 +39,7 @@ public final class AuthService {
         if (!user.isActive()) {
             return AuthenticationResult.inactive();
         }
-        if (user.getRole() == null || !SUPPORTED_ROLES.contains(user.getRole().toUpperCase(Locale.ROOT))) {
+        if (!SUPPORTED_ROLES.contains(user.getRoleLabel().toUpperCase(Locale.ROOT))) {
             return AuthenticationResult.invalid("Invalid username or password.");
         }
         return AuthenticationResult.success(user);

@@ -334,7 +334,8 @@ public class CashierCollectFrame {
         if (balancesPanel == null || selectedStudent == null) return;
         balancesPanel.removeAll();
         balanceGroup = new ButtonGroup();
-        balancesPanel.add(createSelectableBalanceRow("Enrolled-course tuition", "Balance from enrollments and verified payments",
+        balancesPanel.add(createSelectableBalanceRow("Tuition and miscellaneous fees",
+                "Balance from enrolled courses, fees, and verified payments",
                 selectedStudent.tuitionBalance, true));
         balancesPanel.revalidate();
         balancesPanel.repaint();

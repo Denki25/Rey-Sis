@@ -125,7 +125,6 @@ public class StudentProfileFrame {
         navigation.add(createNavigationButton("My Profile", StudentDashboardFrame.IconType.PROFILE, true));
         navigation.add(createNavigationButton("Enrollment", StudentDashboardFrame.IconType.ENROLLMENT, false));
         navigation.add(createNavigationButton("My Schedule", StudentDashboardFrame.IconType.CALENDAR, false));
-        navigation.add(createNavigationButton("Grades", StudentDashboardFrame.IconType.GRADES, false));
         sidebar.add(navigation, BorderLayout.CENTER);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -165,9 +164,6 @@ public class StudentProfileFrame {
                     openEnrollment(); // Replace showComingSoon("Enrollment")
                 } else if (text.equals("My Profile")) {
                     showProfileMessage();
-                } else if (text.equals("Grades")) {
-                    window.dispose();
-                    new StudentGradesFrame(student).showWindow();
                 } else if (text.equals("My Schedule")) {
                     window.dispose();
                     new StudentScheduleFrame(student).showWindow();
@@ -313,9 +309,9 @@ public class StudentProfileFrame {
         JPanel cards = new JPanel(new GridLayout(1, 4, 10, 0));
         cards.setOpaque(false);
         cards.add(summaryCard("Enrolled Subjects", String.valueOf(student.getEnrolledSubjects()), StudentDashboardFrame.IconType.ENROLLMENT, DEEP_GREEN));
-        cards.add(summaryCard("Current GPA", String.format("%.2f", student.getCurrentGpa()), StudentDashboardFrame.IconType.GPA, GOLD));
-        cards.add(summaryCard("Units Enrolled", student.getEnrolledUnits() + " / " + student.getMaximumUnits(), StudentDashboardFrame.IconType.GRADES, DEEP_GREEN));
-        cards.add(summaryCard("Standing", student.getDeansListStanding(), StudentDashboardFrame.IconType.STAR, GOLD));
+        cards.add(summaryCard("Year Level", student.getYearLevel(), StudentDashboardFrame.IconType.PROFILE, GOLD));
+        cards.add(summaryCard("Units Enrolled", student.getEnrolledUnits() + " / " + student.getMaximumUnits(), StudentDashboardFrame.IconType.STATS, DEEP_GREEN));
+        cards.add(summaryCard("Academic Status", student.getAcademicStatus(), StudentDashboardFrame.IconType.STAR, GOLD));
         return cards;
     }
 

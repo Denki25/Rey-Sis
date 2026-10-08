@@ -18,10 +18,21 @@ public final class AdminStudentService {
     }
 
     public List<StudentDirectoryRepository.StudentSummary> findStudents() throws SQLException {
+        requireRegistrar();
+        return repository.findAll();
+    }
+
+    public StudentDirectoryRepository.CreatedStudent createStudent(String firstName, String lastName,
+                                                                   String program, String yearLevel,
+                                                                   String section, String email) throws SQLException {
+        requireRegistrar();
+        return repository.createStudent(firstName, lastName, program, yearLevel, section, email);
+    }
+
+    private void requireRegistrar() {
         String role = UserSession.getCurrentUser() == null ? "" : UserSession.getCurrentUser().getRole();
         if (!"ADMIN".equalsIgnoreCase(role) && !"REGISTRAR".equalsIgnoreCase(role)) {
             throw new SecurityException("Registrar access is required.");
         }
-        return repository.findAll();
     }
 }

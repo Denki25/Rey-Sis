@@ -5,6 +5,7 @@ import org.example.auth.AuthService;
 import org.example.auth.UserSession;
 import org.example.data.StudentRepository;
 import org.example.model.User;
+import org.example.model.Person;
 import org.example.ui.views.admin.AdminDashboardFrame;
 import org.example.ui.views.cashier.CashierDashboardFrame;
 import org.example.ui.views.student.StudentDashboardFrame;
@@ -277,7 +278,8 @@ public class LoginFrame {
 
     private void openAuthenticatedUser(User user) throws SQLException {
         UserSession.start(user);
-        String role = user.getRole() == null ? "" : user.getRole().toUpperCase();
+        Person authenticatedPerson = user;
+        String role = authenticatedPerson.getRoleLabel().toUpperCase();
         if ("STUDENT".equals(role)) {
             var student = studentRepository.findByUserId(user.getUserId());
             if (student == null) {
